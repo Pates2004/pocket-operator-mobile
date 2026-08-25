@@ -1,0 +1,27 @@
+# Lokalne archiwum i artefakty robocze
+trash/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Stan i pliki tworzone przez użytkownika
+po.ini
+*.po15
+*.wav
+*.log
+
+# Środowiska i wyniki budowania
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+
+# Pliki edytorów i systemu
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

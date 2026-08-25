@@ -1,0 +1,1783 @@
+import configparser
+import json
+import math
+from pathlib import Path
+
+import sounddevice as sd
+import wx
+
+import midi_handler
+import sequencer
+import synth
+
+try:
+    from accessible_output2.outputs.auto import Auto
+
+    SPEECH_AVAILABLE = True
+except ImportError:
+    Auto = None
+    SPEECH_AVAILABLE = False
+
+
+APP_NAME = "Pocket Operator mobile"
+APP_VERSION = "15.0"
+PROJECT_FORMAT = "pocket-operator-mobile-project"
+BASE_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = BASE_DIR / "po.ini"
+BASE_FREQ_C4 = 261.63
+
+KEY_OFFSET_MAP = {
+    ord("Z"): 0,
+    ord("S"): 1,
+    ord("X"): 2,
+    ord("D"): 3,
+    ord("C"): 4,
+    ord("V"): 5,
+    ord("G"): 6,
+    ord("B"): 7,
+    ord("H"): 8,
+    ord("N"): 9,
+    ord("J"): 10,
+    ord("M"): 11,
+    ord(","): 12,
+    ord("L"): 13,
+    ord("."): 14,
+    ord(";"): 15,
+    ord("/"): 16,
+    ord("Q"): 12,
+    ord("2"): 13,
+    ord("W"): 14,
+    ord("3"): 15,
+    ord("E"): 16,
+    ord("4"): 17,
+    ord("R"): 17,
+    ord("5"): 18,
+    ord("T"): 19,
+    ord("6"): 20,
+    ord("Y"): 21,
+    ord("7"): 22,
+    ord("U"): 23,
+}
+
+BLACK_KEYS = {
+    ord("S"),
+    ord("D"),
+    ord("G"),
+    ord("H"),
+    ord("J"),
+    ord("L"),
+    ord(";"),
+    ord("2"),
+    ord("3"),
+    ord("5"),
+    ord("6"),
+    ord("7"),
+}
+
+# Windows zwraca dla klawiszy interpunkcyjnych kody VK_OEM zamiast ASCII.
+KEY_CODE_ALIASES = {
+    186: ord(";"),
+    187: ord("="),
+    188: ord(","),
+    189: ord("-"),
+    190: ord("."),
+    191: ord("/"),
+    192: ord("`"),
+    220: ord("\\"),
+}
+
+HELP_TEXT = f"""{APP_NAME.upper()} v{APP_VERSION} — SKRÓTY
+
+GRA
+  Spacja: start/stop sekwencera
+  Ctrl+R: nagrywanie pętli
+  Z, S, X, D... oraz Q, 2, W, 3...: nuty
+  F5..F12: kick/snare/hihat/tom/clap/cowbell/crash/laser
+  Ctrl+Shift+Z/X/C/V/B/N/M/, : globalne bębny
+
+INSTRUMENT I GAŁKI
+  Ctrl+F1..F5: Square, Saw, Triangle, Noise, DrumKit
+  PgUp/PgDn: gałka A instrumentu
+  Home/End: gałka B instrumentu
+  Ctrl+Alt+PgUp/PgDn/Home/End: gałki warstw
+  Alt+PgUp/PgDn/Home/End: gałki efektów
+
+WARSTWY I EFEKTY
+  Alt+` oraz Alt+1..=: włącz/wyłącz warstwę
+  Ctrl+Shift+` oraz Ctrl+Shift+1..=: Punch-In (efekt działa podczas trzymania)
+  Efekty można włączyć na stałe z menu Efekty
+  Ctrl+Shift+Backspace: wyłącz wszystkie warstwy
+  Alt+Shift+Backspace: wyłącz wszystkie efekty
+
+MACIERZ STEROWANIA
+  Ctrl+Num /, 1..0, *, -, .: wybór warstwy
+  Ctrl+Shift+Num /, 1..0, *, -: wybór efektu
+  Ctrl+NumDel: zaznacz/odznacz wszystkie aktywne warstwy
+  Ctrl+Shift+NumDel: zaznacz/odznacz wszystkie aktywne efekty
+
+INNE
+  Alt+strzałki góra/dół/lewo: głośniej/ciszej/reset głośności
+  Ctrl+strzałki góra/dół/lewo: oktawa wyżej/niżej/reset
+  Ctrl+S/G/H/B: Sustain/Glide/Akordy/Blokada powtórzeń
+  Ctrl+Shift+P: Globalne bębny
+  Ctrl+Shift+Escape: natychmiastowe wyciszenie wszystkich dźwięków
+  Ctrl+Shift+Delete: reset fabryczny
+"""
+
+
+class Speaker:
+    def __init__(self):
+        self.driver = None
+        if SPEECH_AVAILABLE:
+            try:
+                self.driver = Auto()
+            except Exception as error:  # noqa: BLE001 - opcjonalny sterownik zewnętrzny
+                print(f"Nie udało się uruchomić mowy: {error}")
+
+    def say(self, text):
+        if self.driver:
+            try:
+                self.driver.output(str(text), True)
+                return
+            except Exception as error:  # noqa: BLE001 - awaria TTS nie może zatrzymać audio
+                print(f"Błąd syntezy mowy: {error}")
+        print(f"[SAY] {text}")
+
+
+class ShortcutsDialog(wx.Dialog):
+    def __init__(self, parent):
+        super().__init__(parent, title="Skróty", size=(650, 550))
+        text = wx.TextCtrl(
+            self,
+            value=HELP_TEXT,
+            style=wx.TE_MULTILINE | wx.TE_READONLY,
+        )
+        button = wx.Button(self, wx.ID_OK, "OK")
+        layout = wx.BoxSizer(wx.VERTICAL)
+        layout.Add(text, 1, wx.EXPAND | wx.ALL, 10)
+        layout.Add(button, 0, wx.ALIGN_CENTER | wx.BOTTOM, 10)
+        self.SetSizer(layout)
+        text.SetFocus()
+
+
+class DrumEditorDialog(wx.Dialog):
+    def __init__(self, parent, sequencer_instance):
+        super().__init__(parent, title="Edytor perkusji", size=(420, 180))
+        self.seq = sequencer_instance
+        self.speaker = parent.speaker
+        self.instruments = list(sequencer.DRUM_INSTRUMENTS)
+        self.instrument_index = 0
+        self.step = 0
+
+        panel = wx.Panel(self, style=wx.WANTS_CHARS)
+        self.label = wx.StaticText(panel, label="")
+        layout = wx.BoxSizer(wx.VERTICAL)
+        layout.Add(self.label, 1, wx.EXPAND | wx.ALL, 20)
+        panel.SetSizer(layout)
+        panel.Bind(wx.EVT_KEY_DOWN, self.on_key)
+        self.update_view(speak=True)
+        panel.SetFocus()
+
+    def update_view(self, speak=False):
+        instrument = self.instruments[self.instrument_index]
+        active = self.seq.drum_tracks[instrument][self.step]
+        state = "włączony" if active else "pusty"
+        message = f"{instrument}, krok {self.step + 1}, {state}"
+        self.label.SetLabel(message)
+        if speak:
+            self.speaker.say(message)
+
+    def on_key(self, event):
+        key = event.GetKeyCode()
+        if key == wx.WXK_RIGHT:
+            self.step = (self.step + 1) % 16
+            self.update_view(speak=True)
+        elif key == wx.WXK_LEFT:
+            self.step = (self.step - 1) % 16
+            self.update_view(speak=True)
+        elif key == wx.WXK_DOWN:
+            self.instrument_index = (
+                self.instrument_index + 1
+            ) % len(self.instruments)
+            self.update_view(speak=True)
+        elif key == wx.WXK_UP:
+            self.instrument_index = (
+                self.instrument_index - 1
+            ) % len(self.instruments)
+            self.update_view(speak=True)
+        elif key == wx.WXK_SPACE:
+            active = self.seq.toggle_drum(
+                self.instruments[self.instrument_index], self.step
+            )
+            self.speaker.say("Włączony" if active else "Wyłączony")
+            self.update_view()
+        elif key == wx.WXK_ESCAPE:
+            self.Close()
+        else:
+            event.Skip()
+
+
+class MainFrame(wx.Frame):
+    LAYERS = (
+        ("Octave Down", "oct_down", "`"),
+        ("Sub Square", "sub_sq", "1"),
+        ("Sub Octave", "sub_oct", "2"),
+        ("Fifth", "fifth", "3"),
+        ("Maj 3rd", "maj3", "4"),
+        ("Min 3rd", "min3", "5"),
+        ("Octave Up", "oct_up", "6"),
+        ("Detune", "detune", "7"),
+        ("Noise", "noise", "8"),
+        ("Digital", "digital", "9"),
+        ("Harmonics", "harm", "0"),
+        ("Organ Stack", "organ", "-"),
+        ("Vinyl", "vinyl", "="),
+        ("Sub Sine", "sub_sin", "\\"),
+    )
+    EFFECTS = (
+        ("Reverb", "verb", "`"),
+        ("Low Pass", "lpf", "1"),
+        ("High Pass", "hpf", "2"),
+        ("BitCrush", "crush", "3"),
+        ("Distortion", "dist", "4"),
+        ("Chopper", "chop", "5"),
+        ("Sidechain", "side", "6"),
+        ("Tremolo", "trem", "7"),
+        ("RingMod", "ring", "8"),
+        ("Decimator", "deci", "9"),
+        ("Fuzz", "fuzz", "0"),
+        ("Glitch", "glit", "-"),
+        ("Noise", "noiz", "="),
+    )
+
+    def __init__(
+        self,
+        synth_instance=None,
+        auto_start=True,
+        auto_midi=True,
+        load_config=True,
+    ):
+        super().__init__(
+            parent=None,
+            title=f"{APP_NAME} v{APP_VERSION}",
+            size=(680, 320),
+        )
+        self.speaker = Speaker()
+        self._closing = False
+        self._skip_save = False
+        self.audio_device = None
+        self.audio_device_name = ""
+        self.audio_error = None
+
+        if synth_instance is not None:
+            self.synth = synth_instance
+        else:
+            try:
+                self.synth = synth.Synthesizer()
+            except Exception as error:  # noqa: BLE001 - aplikacja uruchamia się bez audio
+                self.audio_error = error
+                self.synth = synth.Synthesizer(create_stream=False)
+
+        self.seq = sequencer.Sequencer(self.synth)
+        self.midi = midi_handler.MidiInputHandler(
+            self.synth,
+            lambda: self.waveform,
+            self.record_midi_event,
+        )
+        self.waveform = "square"
+        self.octave = 0
+        self.bpm = 120
+        self.pc_keyboard = True
+        self.block_repeat = True
+        self.global_drums = True
+        self.chord_mode = False
+        self.key_voices = {}
+        self.punch_in_keys = {}
+        self.recorded_notes = set()
+        self.saved_midi = ""
+
+        self.panel = wx.Panel(self, style=wx.WANTS_CHARS)
+        self.panel.SetBackgroundColour("#202020")
+        label = wx.StaticText(
+            self.panel,
+            label=f"{APP_NAME} v{APP_VERSION}\nAlt = menu, F1 = pomoc",
+        )
+        label.SetForegroundColour("#D0D0D0")
+        layout = wx.BoxSizer(wx.VERTICAL)
+        layout.Add(label, 1, wx.ALIGN_CENTER | wx.ALL, 30)
+        self.panel.SetSizer(layout)
+
+        self.create_menu()
+        self.panel.Bind(wx.EVT_KEY_DOWN, self.on_key_down)
+        self.panel.Bind(wx.EVT_KEY_UP, self.on_key_up)
+        self.Bind(wx.EVT_CLOSE, self.on_close)
+        self.CreateStatusBar()
+        self._set_default_checks()
+
+        if load_config:
+            self.load_settings()
+        if auto_start:
+            try:
+                self.synth.start()
+            except Exception as error:  # noqa: BLE001 - aplikacja pozostaje dostępna bez audio
+                self.audio_error = error
+            else:
+                try:
+                    default_output = int(sd.default.device[1])
+                    if self.audio_device is None and default_output >= 0:
+                        self.audio_device = default_output
+                        self.audio_device_name = str(
+                            sd.query_devices(default_output)["name"]
+                        )
+                except (IndexError, TypeError, ValueError, sd.PortAudioError) as error:
+                    print(f"Nie udało się zapamiętać domyślnego audio: {error}")
+        if auto_midi:
+            self.open_saved_midi()
+
+        self.update_status()
+        wx.CallAfter(self.panel.SetFocus)
+        if self.audio_error:
+            wx.CallAfter(
+                wx.MessageBox,
+                f"Silnik działa bez wyjścia audio:\n{self.audio_error}",
+                "Błąd audio",
+                wx.OK | wx.ICON_WARNING,
+            )
+        self.speaker.say(f"{APP_NAME} gotowy")
+
+    def create_menu(self):
+        menu_bar = wx.MenuBar()
+
+        file_menu = wx.Menu()
+        open_project_item = file_menu.Append(
+            wx.ID_ANY, "Otwórz projekt v15...\tCtrl+O"
+        )
+        save_project_item = file_menu.Append(
+            wx.ID_ANY, "Zapisz projekt v15...\tCtrl+Shift+S"
+        )
+        file_menu.AppendSeparator()
+        export_item = file_menu.Append(
+            wx.ID_ANY, "Eksport WAV...\tCtrl+Shift+E"
+        )
+        file_menu.AppendSeparator()
+        reset_item = file_menu.Append(
+            wx.ID_ANY, "Reset fabryczny\tCtrl+Shift+Del"
+        )
+        exit_item = file_menu.Append(wx.ID_EXIT, "Wyjdź\tAlt+F4")
+        self.Bind(wx.EVT_MENU, self.open_project, open_project_item)
+        self.Bind(wx.EVT_MENU, self.save_project, save_project_item)
+        self.Bind(wx.EVT_MENU, self.export_wav, export_item)
+        self.Bind(wx.EVT_MENU, self.factory_reset, reset_item)
+        self.Bind(wx.EVT_MENU, self.on_close, exit_item)
+
+        instrument_menu = wx.Menu()
+        self.wave_items = {}
+        waveforms = [
+            ("Square", "square", "F1"),
+            ("Saw", "saw", "F2"),
+            ("Triangle", "triangle", "F3"),
+            ("Noise", "noise", "F4"),
+            ("DrumKit", "drum_kit", "F5"),
+        ]
+        for name, code, key in waveforms:
+            item = instrument_menu.Append(
+                wx.ID_ANY,
+                f"{name}\tCtrl+{key}",
+                kind=wx.ITEM_RADIO,
+            )
+            self.Bind(
+                wx.EVT_MENU,
+                lambda event, value=code: self.set_waveform(value),
+                item,
+            )
+            self.wave_items[code] = item
+
+        layer_menu = wx.Menu()
+        clear_layers = layer_menu.Append(
+            wx.ID_ANY, "Wyłącz wszystkie\tCtrl+Shift+Bksp"
+        )
+        self.Bind(wx.EVT_MENU, self.clear_layers, clear_layers)
+        layer_menu.AppendSeparator()
+        self.layer_items = {}
+        self.layer_control_items = {}
+        for name, code, key in self.LAYERS:
+            item = layer_menu.Append(
+                wx.ID_ANY,
+                f"{name}\tAlt+{key}",
+                kind=wx.ITEM_CHECK,
+            )
+            self.Bind(
+                wx.EVT_MENU,
+                lambda event, value=code: self.toggle_layer(value),
+                item,
+            )
+            self.layer_items[code] = item
+
+        effects_menu = wx.Menu()
+        clear_effects = effects_menu.Append(
+            wx.ID_ANY, "Wyłącz wszystkie\tAlt+Shift+Bksp"
+        )
+        self.Bind(wx.EVT_MENU, self.clear_effects, clear_effects)
+        effects_menu.AppendSeparator()
+        self.effect_items = {}
+        self.effect_control_items = {}
+        for name, code, key in self.EFFECTS:
+            item = effects_menu.Append(
+                wx.ID_ANY,
+                f"{name} (stały; Punch-In Ctrl+Shift+{key})",
+                kind=wx.ITEM_CHECK,
+            )
+            self.Bind(
+                wx.EVT_MENU,
+                lambda event, value=code: self.toggle_effect(value),
+                item,
+            )
+            self.effect_items[code] = item
+
+        control_menu = wx.Menu()
+        layer_control_menu = wx.Menu()
+        all_layers = layer_control_menu.Append(
+            wx.ID_ANY, "Przełącz wszystkie\tCtrl+NumDel"
+        )
+        self.Bind(wx.EVT_MENU, self.toggle_all_layer_targets, all_layers)
+        layer_control_menu.AppendSeparator()
+        for name, code, _ in self.LAYERS:
+            item = layer_control_menu.Append(
+                wx.ID_ANY, f"Steruj: {name}", kind=wx.ITEM_CHECK
+            )
+            item.Enable(False)
+            self.Bind(
+                wx.EVT_MENU,
+                lambda event, value=code: self.toggle_layer_target(value),
+                item,
+            )
+            self.layer_control_items[code] = item
+        control_menu.AppendSubMenu(layer_control_menu, "Cel gałek warstw")
+
+        effect_control_menu = wx.Menu()
+        all_effects = effect_control_menu.Append(
+            wx.ID_ANY, "Przełącz wszystkie\tCtrl+Shift+NumDel"
+        )
+        self.Bind(wx.EVT_MENU, self.toggle_all_effect_targets, all_effects)
+        effect_control_menu.AppendSeparator()
+        for name, code, _ in self.EFFECTS:
+            item = effect_control_menu.Append(
+                wx.ID_ANY, f"Steruj: {name}", kind=wx.ITEM_CHECK
+            )
+            item.Enable(False)
+            self.Bind(
+                wx.EVT_MENU,
+                lambda event, value=code: self.toggle_effect_target(value),
+                item,
+            )
+            self.effect_control_items[code] = item
+        control_menu.AppendSubMenu(effect_control_menu, "Cel gałek efektów")
+
+        settings_menu = wx.Menu()
+        self.sustain_item = settings_menu.Append(
+            wx.ID_ANY, "Sustain\tCtrl+S", kind=wx.ITEM_CHECK
+        )
+        self.glide_item = settings_menu.Append(
+            wx.ID_ANY, "Glide\tCtrl+G", kind=wx.ITEM_CHECK
+        )
+        self.chord_item = settings_menu.Append(
+            wx.ID_ANY, "Akordy\tCtrl+H", kind=wx.ITEM_CHECK
+        )
+        self.global_drums_item = settings_menu.Append(
+            wx.ID_ANY, "Globalne bębny\tCtrl+Shift+P", kind=wx.ITEM_CHECK
+        )
+        self.release_item = settings_menu.Append(
+            wx.ID_ANY, "Wyrównany release", kind=wx.ITEM_CHECK
+        )
+        self.pc_keyboard_item = settings_menu.Append(
+            wx.ID_ANY, "Klawiatura PC", kind=wx.ITEM_CHECK
+        )
+        self.block_repeat_item = settings_menu.Append(
+            wx.ID_ANY, "Blokada powtórzeń\tCtrl+B", kind=wx.ITEM_CHECK
+        )
+        for item, callback in (
+            (self.sustain_item, self.on_sustain),
+            (self.glide_item, self.on_glide),
+            (self.chord_item, self.on_chord),
+            (self.global_drums_item, self.on_global_drums),
+            (self.release_item, self.on_release),
+            (self.pc_keyboard_item, self.on_pc_keyboard),
+            (self.block_repeat_item, self.on_block_repeat),
+        ):
+            self.Bind(wx.EVT_MENU, callback, item)
+
+        audio_menu = wx.Menu()
+        audio_item = audio_menu.Append(wx.ID_ANY, "Wybierz wyjście audio...")
+        self.Bind(wx.EVT_MENU, self.select_audio_device, audio_item)
+
+        midi_menu = wx.Menu()
+        midi_select = midi_menu.Append(wx.ID_ANY, "Wybierz wejście MIDI...")
+        midi_refresh = midi_menu.Append(wx.ID_ANY, "Odśwież MIDI")
+        self.Bind(wx.EVT_MENU, self.select_midi_device, midi_select)
+        self.Bind(wx.EVT_MENU, self.refresh_midi, midi_refresh)
+
+        play_menu = wx.Menu()
+        play_item = play_menu.Append(wx.ID_ANY, "Start/Stop\tSpace")
+        record_item = play_menu.Append(wx.ID_ANY, "Nagrywanie\tCtrl+R")
+        drum_editor = play_menu.Append(wx.ID_ANY, "Edytor perkusji\tCtrl+E")
+        set_bpm = play_menu.Append(wx.ID_ANY, "Ustaw BPM...")
+        set_octave = play_menu.Append(wx.ID_ANY, "Ustaw oktawę...")
+        self.Bind(wx.EVT_MENU, self.toggle_playback, play_item)
+        self.Bind(wx.EVT_MENU, self.toggle_recording, record_item)
+        self.Bind(wx.EVT_MENU, self.open_drum_editor, drum_editor)
+        self.Bind(wx.EVT_MENU, self.ask_bpm, set_bpm)
+        self.Bind(wx.EVT_MENU, self.ask_octave, set_octave)
+
+        edit_menu = wx.Menu()
+        knob_commands = (
+            ("Ustaw gałkę instrumentu A...", "main", "a"),
+            ("Ustaw gałkę instrumentu B...", "main", "b"),
+            ("Ustaw gałkę warstw A...", "layer", "a"),
+            ("Ustaw gałkę warstw B...", "layer", "b"),
+            ("Ustaw gałkę efektów A...", "fx", "a"),
+            ("Ustaw gałkę efektów B...", "fx", "b"),
+        )
+        for label, target, parameter in knob_commands:
+            item = edit_menu.Append(wx.ID_ANY, label)
+            self.Bind(
+                wx.EVT_MENU,
+                lambda event,
+                selected_target=target,
+                selected_parameter=parameter: self.ask_knob(
+                    selected_target,
+                    selected_parameter,
+                ),
+                item,
+            )
+        edit_menu.AppendSeparator()
+        clear_melody = edit_menu.Append(wx.ID_ANY, "Wyczyść melodię")
+        clear_drums = edit_menu.Append(wx.ID_ANY, "Wyczyść patterny perkusji")
+        clear_sequence = edit_menu.Append(wx.ID_ANY, "Wyczyść cały sekwencer")
+        edit_menu.AppendSeparator()
+        panic_item = edit_menu.Append(
+            wx.ID_ANY, "PANIC — wycisz wszystko\tCtrl+Shift+Esc"
+        )
+        self.Bind(
+            wx.EVT_MENU,
+            lambda event: self.clear_sequencer("melody"),
+            clear_melody,
+        )
+        self.Bind(
+            wx.EVT_MENU,
+            lambda event: self.clear_sequencer("drums"),
+            clear_drums,
+        )
+        self.Bind(
+            wx.EVT_MENU,
+            lambda event: self.clear_sequencer("all"),
+            clear_sequence,
+        )
+        self.Bind(wx.EVT_MENU, self.panic, panic_item)
+
+        tempo_menu = wx.Menu()
+        custom_tempo = tempo_menu.Append(wx.ID_ANY, "Ustaw własne BPM...")
+        self.Bind(wx.EVT_MENU, self.ask_bpm, custom_tempo)
+        tempo_menu.AppendSeparator()
+        for preset in (60, 80, 100, 120, 140, 160, 180):
+            item = tempo_menu.Append(wx.ID_ANY, f"{preset} BPM")
+            self.Bind(
+                wx.EVT_MENU,
+                lambda event, value=preset: self.set_bpm(value),
+                item,
+            )
+
+        help_menu = wx.Menu()
+        shortcuts_item = help_menu.Append(wx.ID_ANY, "Skróty\tF1")
+        about_item = help_menu.Append(wx.ID_ABOUT, "O programie")
+        self.Bind(
+            wx.EVT_MENU,
+            lambda event: ShortcutsDialog(self).ShowModal(),
+            shortcuts_item,
+        )
+        self.Bind(wx.EVT_MENU, self.show_about, about_item)
+
+        for menu, title in (
+            (file_menu, "&Plik"),
+            (instrument_menu, "&Instrument"),
+            (layer_menu, "&Warstwy"),
+            (effects_menu, "&Efekty"),
+            (control_menu, "&Sterowanie"),
+            (settings_menu, "&Ustawienia"),
+            (audio_menu, "&Audio"),
+            (midi_menu, "&MIDI"),
+            (play_menu, "&Gra"),
+            (edit_menu, "&Edycja"),
+            (tempo_menu, "&Tempo"),
+            (help_menu, "&Pomoc"),
+        ):
+            menu_bar.Append(menu, title)
+        self.SetMenuBar(menu_bar)
+
+    def _set_default_checks(self):
+        self.wave_items[self.waveform].Check(True)
+        self.sustain_item.Check(self.synth.sus)
+        self.glide_item.Check(self.synth.glide)
+        self.chord_item.Check(self.chord_mode)
+        self.global_drums_item.Check(self.global_drums)
+        self.release_item.Check(self.synth.fix_rel)
+        self.pc_keyboard_item.Check(self.pc_keyboard)
+        self.block_repeat_item.Check(self.block_repeat)
+
+    @staticmethod
+    def _checked(event, item):
+        if event is not None and hasattr(event, "IsChecked"):
+            return event.IsChecked()
+        return item.IsChecked()
+
+    def _toggle_menu_item(self, item, callback):
+        item.Check(not item.IsChecked())
+        callback(item)
+
+    def set_waveform(self, waveform):
+        if waveform not in self.wave_items:
+            return
+        self.waveform = waveform
+        self.wave_items[waveform].Check(True)
+        self.speaker.say(f"Instrument {waveform}")
+        self.update_status()
+
+    def set_octave(self, octave):
+        self.octave = max(-3, min(3, int(octave)))
+        self.speaker.say(f"Oktawa {self.octave}")
+        self.update_status()
+
+    def set_volume(self, delta=0.0, reset=False):
+        value = 0.2 if reset else self.synth.vol + delta
+        self.synth.set_vol(value)
+        self.speaker.say(f"Głośność {int(self.synth.vol * 100)} procent")
+        self.update_status()
+
+    def set_bpm(self, bpm):
+        self.seq.set_bpm(bpm)
+        self.bpm = int(bpm)
+        self.speaker.say(f"Tempo {self.bpm}")
+        self.update_status()
+
+    def update_status(self):
+        state = "GRA" if self.seq.running else "STOP"
+        if self.seq.recording:
+            state += " REC"
+        self.SetStatusText(
+            f"{state} | BPM:{self.bpm} | Okt:{self.octave} | "
+            f"A:{int(self.synth.values['main_a'] * 100)} "
+            f"B:{int(self.synth.values['main_b'] * 100)} | "
+            f"Vol:{int(self.synth.vol * 100)}% | "
+            f"Warstwy:{len(self.synth.layers)} FX:{len(self.synth.fx)} | "
+            f"Krok:{self.seq.current_step + 1}/16"
+        )
+
+    def toggle_layer(self, layer):
+        if layer in self.synth.layers:
+            self.synth.layers.remove(layer)
+            self.layer_items[layer].Check(False)
+            self.speaker.say(f"Wyłączono warstwę {layer}")
+        else:
+            self.synth.layers.add(layer)
+            self.layer_items[layer].Check(True)
+            self.speaker.say(f"Włączono warstwę {layer}")
+        self._update_control_ui()
+
+    def toggle_effect(self, effect):
+        if effect in self.synth.fx:
+            self.synth.fx.remove(effect)
+            self.effect_items[effect].Check(False)
+            self.speaker.say(f"Wyłączono efekt {effect}")
+        else:
+            self.synth.fx.add(effect)
+            self.effect_items[effect].Check(True)
+            self.speaker.say(f"Włączono efekt {effect}")
+        self._update_control_ui()
+
+    def clear_layers(self, event=None):
+        self.synth.layers.clear()
+        self.synth.targets_layer.clear()
+        for item in self.layer_items.values():
+            item.Check(False)
+        self._update_control_ui()
+        self.speaker.say("Wyłączono wszystkie warstwy")
+
+    def clear_effects(self, event=None):
+        self.synth.fx.clear()
+        self.synth.targets_fx.clear()
+        for item in self.effect_items.values():
+            item.Check(False)
+        self._update_control_ui()
+        self.speaker.say("Wyłączono wszystkie efekty")
+
+    def toggle_layer_target(self, layer):
+        if layer not in self.synth.layers:
+            self.speaker.say(f"Warstwa {layer} nie jest aktywna")
+            return
+        if layer in self.synth.targets_layer:
+            self.synth.targets_layer.remove(layer)
+            selected = False
+        else:
+            self.synth.targets_layer.add(layer)
+            selected = True
+        self.layer_control_items[layer].Check(selected)
+        self.speaker.say(
+            f"{'Zaznaczono' if selected else 'Odznaczono'} {layer}"
+        )
+
+    def toggle_effect_target(self, effect):
+        if effect not in self.synth.fx:
+            self.speaker.say(f"Efekt {effect} nie jest aktywny")
+            return
+        if effect in self.synth.targets_fx:
+            self.synth.targets_fx.remove(effect)
+            selected = False
+        else:
+            self.synth.targets_fx.add(effect)
+            selected = True
+        self.effect_control_items[effect].Check(selected)
+        self.speaker.say(
+            f"{'Zaznaczono' if selected else 'Odznaczono'} {effect}"
+        )
+
+    def toggle_all_layer_targets(self, event=None):
+        available = set(self.synth.layers)
+        if not available:
+            self.speaker.say("Brak aktywnych warstw")
+            return
+        if self.synth.targets_layer == available:
+            self.synth.targets_layer.clear()
+            message = "Odznaczono wszystkie warstwy"
+        else:
+            self.synth.targets_layer.update(available)
+            message = "Zaznaczono wszystkie warstwy"
+        self._update_control_ui()
+        self.speaker.say(message)
+
+    def toggle_all_effect_targets(self, event=None):
+        available = set(self.synth.fx)
+        if not available:
+            self.speaker.say("Brak aktywnych efektów")
+            return
+        if self.synth.targets_fx == available:
+            self.synth.targets_fx.clear()
+            message = "Odznaczono wszystkie efekty"
+        else:
+            self.synth.targets_fx.update(available)
+            message = "Zaznaczono wszystkie efekty"
+        self._update_control_ui()
+        self.speaker.say(message)
+
+    def _update_control_ui(self):
+        self.synth.targets_layer.intersection_update(self.synth.layers)
+        self.synth.targets_fx.intersection_update(self.synth.fx)
+        for _, code, _ in self.LAYERS:
+            active = code in self.synth.layers
+            item = self.layer_control_items[code]
+            item.Enable(active)
+            item.Check(active and code in self.synth.targets_layer)
+        for _, code, _ in self.EFFECTS:
+            active = code in self.synth.fx
+            item = self.effect_control_items[code]
+            item.Enable(active)
+            item.Check(active and code in self.synth.targets_fx)
+
+    def change_knob(self, target, parameter, delta=None, absolute=None):
+        if target == "main":
+            current = self.synth.values[f"main_{parameter}"]
+        elif target == "layer":
+            current = self.synth.get_layer_val(parameter)
+        else:
+            current = self.synth.get_fx_val(parameter)
+        value = absolute if absolute is not None else current + delta
+        value = max(0.0, min(1.0, value))
+
+        if target == "main":
+            if parameter == "a":
+                self.synth.set_knob_a(value)
+            else:
+                self.synth.set_knob_b(value)
+        elif target == "layer":
+            self.synth.set_layer_knob(parameter, value)
+        else:
+            self.synth.set_fx_knob(parameter, value)
+
+        if target == "main":
+            value = self.synth.values[f"main_{parameter}"]
+        elif target == "layer":
+            value = self.synth.get_layer_val(parameter)
+        else:
+            value = self.synth.get_fx_val(parameter)
+
+        self.speaker.say(
+            f"{target}, gałka {parameter.upper()}, {int(value * 100)}"
+        )
+        self.update_status()
+
+    def toggle_playback(self, event=None):
+        if self.seq.running:
+            self._close_recorded_notes()
+            self.seq.stop()
+            message = "Stop"
+        else:
+            self.seq.play()
+            message = "Start"
+        self.speaker.say(message)
+        self.update_status()
+
+    def toggle_recording(self, event=None):
+        enabled = not self.seq.recording
+        if not enabled:
+            self._close_recorded_notes()
+        self.seq.set_recording(enabled)
+        self.speaker.say("Nagrywanie włączone" if enabled else "Nagrywanie wyłączone")
+        self.update_status()
+
+    def trigger_note(self, physical_key, semitone, velocity=1.0):
+        frequency = BASE_FREQ_C4 * math.pow(
+            2, (semitone + self.octave * 12) / 12.0
+        )
+        note_key = (physical_key, semitone)
+        self.synth.note_on(note_key, frequency, self.waveform, velocity)
+        self.seq.record_event(
+            "note_on",
+            {
+                "key": note_key,
+                "freq": frequency,
+                "wave": self.waveform,
+                "velocity": velocity,
+            },
+        )
+        if self.seq.recording:
+            self.recorded_notes.add(note_key)
+
+    def release_note(self, physical_key, semitone):
+        note_key = (physical_key, semitone)
+        self.synth.note_off(note_key)
+        if note_key in self.recorded_notes:
+            self.seq.record_event("note_off", {"key": note_key})
+            self.recorded_notes.discard(note_key)
+
+    def play_physical_key(self, key):
+        if key in self.key_voices:
+            if self.block_repeat:
+                return
+            self.release_physical_key(key)
+
+        base = KEY_OFFSET_MAP[key]
+        voices = [base]
+        if self.chord_mode:
+            voices.extend([base + (3 if key in BLACK_KEYS else 4), base + 7])
+        self.key_voices[key] = voices
+        for semitone in voices:
+            self.trigger_note(key, semitone)
+
+    def release_physical_key(self, key):
+        for semitone in self.key_voices.pop(key, []):
+            self.release_note(key, semitone)
+
+    def record_midi_event(self, event_type, note):
+        note_key = note.get("key")
+        if event_type == "note_on":
+            self.seq.record_event(event_type, note)
+            if self.seq.recording:
+                self.recorded_notes.add(note_key)
+        elif note_key in self.recorded_notes:
+            self.seq.record_event(event_type, note)
+            self.recorded_notes.discard(note_key)
+
+    def _close_recorded_notes(self):
+        if not self.seq.recording:
+            return
+        for note_key in tuple(self.recorded_notes):
+            self.seq.record_event("note_off", {"key": note_key})
+        self.recorded_notes.clear()
+
+    def begin_punch_in(self, key, effect):
+        if key in self.punch_in_keys:
+            return
+        was_active = effect in self.synth.fx
+        self.punch_in_keys[key] = (effect, was_active)
+        if not was_active:
+            self.synth.fx.add(effect)
+            self.effect_items[effect].Check(True)
+            self._update_control_ui()
+        self.speaker.say(f"Punch-In {effect}")
+
+    def end_punch_in(self, key):
+        punch = self.punch_in_keys.pop(key, None)
+        if punch is None:
+            return
+        effect, was_active = punch
+        if not was_active:
+            self.synth.fx.discard(effect)
+            self.effect_items[effect].Check(False)
+            self._update_control_ui()
+
+    def panic(self, event=None):
+        for key in tuple(self.punch_in_keys):
+            self.end_punch_in(key)
+        for key in tuple(self.key_voices):
+            self.release_physical_key(key)
+        self.midi.panic(immediate=True)
+        self.synth.all_notes_off(immediate=True)
+        self.speaker.say("Panic. Wszystkie dźwięki wyciszone")
+        self.update_status()
+
+    def on_sustain(self, event):
+        self.synth.sus = self._checked(event, self.sustain_item)
+        self.speaker.say(f"Sustain {'włączony' if self.synth.sus else 'wyłączony'}")
+
+    def on_glide(self, event):
+        self.synth.glide = self._checked(event, self.glide_item)
+        self.speaker.say(f"Glide {'włączony' if self.synth.glide else 'wyłączony'}")
+
+    def on_chord(self, event):
+        self.chord_mode = self._checked(event, self.chord_item)
+        self.speaker.say(f"Akordy {'włączone' if self.chord_mode else 'wyłączone'}")
+
+    def on_global_drums(self, event):
+        self.global_drums = self._checked(event, self.global_drums_item)
+        self.speaker.say(
+            f"Globalne bębny {'włączone' if self.global_drums else 'wyłączone'}"
+        )
+
+    def on_release(self, event):
+        self.synth.fix_rel = self._checked(event, self.release_item)
+        self.speaker.say(
+            f"Wyrównany release {'włączony' if self.synth.fix_rel else 'wyłączony'}"
+        )
+
+    def on_pc_keyboard(self, event):
+        self.pc_keyboard = self._checked(event, self.pc_keyboard_item)
+        self.speaker.say(
+            f"Klawiatura PC {'włączona' if self.pc_keyboard else 'wyłączona'}"
+        )
+
+    def on_block_repeat(self, event):
+        self.block_repeat = self._checked(event, self.block_repeat_item)
+        self.speaker.say(
+            f"Blokada powtórzeń {'włączona' if self.block_repeat else 'wyłączona'}"
+        )
+
+    def _matrix_index(self, key):
+        if key == wx.WXK_DIVIDE:
+            return 0
+        if wx.WXK_NUMPAD1 <= key <= wx.WXK_NUMPAD9:
+            return key - wx.WXK_NUMPAD1 + 1
+        if key == wx.WXK_NUMPAD0:
+            return 10
+        if key == wx.WXK_MULTIPLY:
+            return 11
+        if key == wx.WXK_SUBTRACT:
+            return 12
+        if key in {wx.WXK_DECIMAL, wx.WXK_NUMPAD_DELETE}:
+            return 13
+        return None
+
+    def on_key_down(self, event):
+        raw_key = event.GetKeyCode()
+        key = KEY_CODE_ALIASES.get(raw_key, raw_key)
+        control = event.ControlDown()
+        shift = event.ShiftDown()
+        alt = event.AltDown()
+
+        if control and shift and key == wx.WXK_ESCAPE:
+            self.panic()
+            return
+
+        if control and key == wx.WXK_NUMPAD_DELETE:
+            if shift:
+                self.toggle_all_effect_targets()
+            else:
+                self.toggle_all_layer_targets()
+            return
+        if control:
+            matrix_index = self._matrix_index(key)
+            if matrix_index is not None:
+                collection = self.EFFECTS if shift else self.LAYERS
+                if matrix_index >= len(collection):
+                    self.speaker.say("Brak przypisania dla tego klawisza")
+                    return
+                code = collection[matrix_index][1]
+                if shift:
+                    self.toggle_effect_target(code)
+                else:
+                    self.toggle_layer_target(code)
+                return
+
+        if control and not alt and not shift:
+            if key == wx.WXK_UP:
+                self.set_octave(self.octave + 1)
+                return
+            if key == wx.WXK_DOWN:
+                self.set_octave(self.octave - 1)
+                return
+            if key == wx.WXK_LEFT:
+                self.set_octave(0)
+                return
+            if key == ord("-"):
+                self.set_octave(self.octave - 1)
+                return
+            if key == ord("="):
+                self.set_octave(self.octave + 1)
+                return
+            if key == ord("0"):
+                self.set_octave(0)
+                return
+            if wx.WXK_F1 <= key <= wx.WXK_F5:
+                self.set_waveform(
+                    ["square", "saw", "triangle", "noise", "drum_kit"]
+                    [key - wx.WXK_F1]
+                )
+                return
+            if key == wx.WXK_PAGEUP:
+                self.change_knob("main", "a", absolute=0.99)
+                return
+            if key == wx.WXK_PAGEDOWN:
+                self.change_knob("main", "a", absolute=0.01)
+                return
+            if key == wx.WXK_HOME:
+                self.change_knob("main", "b", absolute=1.0)
+                return
+            if key == wx.WXK_END:
+                self.change_knob("main", "b", absolute=0.0)
+                return
+            if key == wx.WXK_DELETE:
+                self.change_knob("main", "a", absolute=0.5)
+                return
+            if key == wx.WXK_BACK:
+                self.change_knob("main", "b", absolute=0.2)
+                return
+            setting_shortcuts = {
+                ord("S"): (self.sustain_item, self.on_sustain),
+                ord("G"): (self.glide_item, self.on_glide),
+                ord("H"): (self.chord_item, self.on_chord),
+                ord("B"): (self.block_repeat_item, self.on_block_repeat),
+            }
+            if key in setting_shortcuts:
+                self._toggle_menu_item(*setting_shortcuts[key])
+                return
+
+        if not control and not shift and not alt:
+            if key == wx.WXK_PAGEUP:
+                self.change_knob("main", "a", delta=0.05)
+                return
+            if key == wx.WXK_PAGEDOWN:
+                self.change_knob("main", "a", delta=-0.05)
+                return
+            if key == wx.WXK_HOME:
+                self.change_knob("main", "b", delta=0.05)
+                return
+            if key == wx.WXK_END:
+                self.change_knob("main", "b", delta=-0.05)
+                return
+            if key == wx.WXK_DELETE:
+                self.change_knob("main", "a", absolute=0.5)
+                return
+            if key == wx.WXK_BACK:
+                self.change_knob("main", "b", absolute=0.2)
+                return
+            if wx.WXK_F5 <= key <= wx.WXK_F12:
+                self.synth.trigger_drum(
+                    sequencer.DRUM_INSTRUMENTS[key - wx.WXK_F5]
+                )
+                return
+
+        if control and shift and alt:
+            if key == wx.WXK_PAGEUP:
+                self.change_knob("layer", "a", absolute=0.99)
+                return
+            if key == wx.WXK_PAGEDOWN:
+                self.change_knob("layer", "a", absolute=0.01)
+                return
+            if key == wx.WXK_HOME:
+                self.change_knob("layer", "b", absolute=1.0)
+                return
+            if key == wx.WXK_END:
+                self.change_knob("layer", "b", absolute=0.0)
+                return
+            if key == wx.WXK_DELETE:
+                self.change_knob("layer", "a", absolute=0.5)
+                return
+            if key == wx.WXK_BACK:
+                self.change_knob("layer", "b", absolute=0.2)
+                return
+
+        if control and alt and not shift:
+            if key == wx.WXK_PAGEUP:
+                self.change_knob("layer", "a", delta=0.05)
+                return
+            if key == wx.WXK_PAGEDOWN:
+                self.change_knob("layer", "a", delta=-0.05)
+                return
+            if key == wx.WXK_HOME:
+                self.change_knob("layer", "b", delta=0.05)
+                return
+            if key == wx.WXK_END:
+                self.change_knob("layer", "b", delta=-0.05)
+                return
+            if key == wx.WXK_DELETE:
+                self.change_knob("layer", "a", absolute=0.5)
+                return
+            if key == wx.WXK_BACK:
+                self.change_knob("layer", "b", absolute=0.2)
+                return
+
+        if alt and not control and not shift:
+            if key == wx.WXK_PAGEUP:
+                self.change_knob("fx", "a", delta=0.05)
+                return
+            if key == wx.WXK_PAGEDOWN:
+                self.change_knob("fx", "a", delta=-0.05)
+                return
+            if key == wx.WXK_HOME:
+                self.change_knob("fx", "b", delta=0.05)
+                return
+            if key == wx.WXK_END:
+                self.change_knob("fx", "b", delta=-0.05)
+                return
+            if key == wx.WXK_DELETE:
+                self.change_knob("fx", "a", absolute=0.5)
+                return
+            if key == wx.WXK_BACK:
+                self.change_knob("fx", "b", absolute=0.5)
+                return
+            if key == wx.WXK_UP:
+                self.set_volume(0.05)
+                return
+            if key == wx.WXK_DOWN:
+                self.set_volume(-0.05)
+                return
+            if key == wx.WXK_LEFT:
+                self.set_volume(reset=True)
+                return
+            layer_keys = {ord(item[2]): item[1] for item in self.LAYERS}
+            if key in layer_keys:
+                self.toggle_layer(layer_keys[key])
+                return
+
+        if control and shift and not alt:
+            if key == ord("P"):
+                self._toggle_menu_item(
+                    self.global_drums_item, self.on_global_drums
+                )
+                return
+            if key == wx.WXK_PAGEUP:
+                self.change_knob("fx", "a", delta=0.05)
+                return
+            if key == wx.WXK_PAGEDOWN:
+                self.change_knob("fx", "a", delta=-0.05)
+                return
+            if key == wx.WXK_HOME:
+                self.change_knob("fx", "b", delta=0.05)
+                return
+            if key == wx.WXK_END:
+                self.change_knob("fx", "b", delta=-0.05)
+                return
+            effect_keys = {ord(item[2]): item[1] for item in self.EFFECTS}
+            if key in effect_keys:
+                self.begin_punch_in(key, effect_keys[key])
+                return
+            if key == wx.WXK_BACK:
+                self.clear_layers()
+                return
+            if key == wx.WXK_DELETE:
+                self.factory_reset()
+                return
+            if self.global_drums:
+                drum = {
+                    ord("Z"): "kick",
+                    ord("X"): "snare",
+                    ord("C"): "hihat",
+                    ord("V"): "tom",
+                    ord("B"): "clap",
+                    ord("N"): "cowbell",
+                    ord("M"): "crash",
+                    ord(","): "laser",
+                }.get(key)
+                if drum:
+                    self.synth.trigger_drum(drum)
+                    return
+
+        if alt and shift and not control and key == wx.WXK_BACK:
+            self.clear_effects()
+            return
+        if key == wx.WXK_SPACE and not control and not alt:
+            self.toggle_playback()
+            return
+        if key == ord("R") and control and not alt:
+            self.toggle_recording()
+            return
+        if self.pc_keyboard and key in KEY_OFFSET_MAP and not control and not alt:
+            self.play_physical_key(key)
+            return
+        event.Skip()
+
+    def on_key_up(self, event):
+        raw_key = event.GetKeyCode()
+        key = KEY_CODE_ALIASES.get(raw_key, raw_key)
+        self.end_punch_in(key)
+        self.release_physical_key(key)
+        event.Skip()
+
+    def open_drum_editor(self, event=None):
+        dialog = DrumEditorDialog(self, self.seq)
+        dialog.ShowModal()
+        dialog.Destroy()
+
+    def ask_bpm(self, event=None):
+        value = wx.GetNumberFromUser(
+            "Podaj tempo 20–300 BPM",
+            "BPM:",
+            "Tempo",
+            self.bpm,
+            20,
+            300,
+            self,
+        )
+        if value != -1:
+            self.set_bpm(value)
+
+    def ask_octave(self, event=None):
+        value = wx.GetNumberFromUser(
+            "Podaj oktawę od -3 do 3",
+            "Oktawa:",
+            "Oktawa",
+            self.octave,
+            -3,
+            3,
+            self,
+        )
+        if value != -1:
+            self.set_octave(value)
+
+    def ask_knob(self, target, parameter):
+        if target == "main":
+            current = self.synth.values[f"main_{parameter}"]
+        elif target == "layer":
+            current = self.synth.get_layer_val(parameter)
+        else:
+            current = self.synth.get_fx_val(parameter)
+        minimum = 1 if parameter == "a" and target in {"main", "layer"} else 0
+        maximum = 99 if parameter == "a" and target in {"main", "layer"} else 100
+        value = wx.GetNumberFromUser(
+            f"Podaj wartość gałki {parameter.upper()} od {minimum} do {maximum}",
+            "Wartość procentowa:",
+            f"Gałka {target}",
+            round(current * 100),
+            minimum,
+            maximum,
+            self,
+        )
+        if value != -1:
+            self.change_knob(target, parameter, absolute=value / 100.0)
+
+    def clear_sequencer(self, scope):
+        labels = {
+            "melody": "nagraną melodię",
+            "drums": "wszystkie patterny perkusji",
+            "all": "cały sekwencer",
+        }
+        if scope not in labels:
+            raise ValueError(f"Nieznany zakres czyszczenia: {scope}")
+        answer = wx.MessageBox(
+            f"Czy wyczyścić {labels[scope]}?",
+            "Czyszczenie sekwencera",
+            wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
+        )
+        if answer != wx.YES:
+            return
+        if scope == "melody":
+            self.seq.clear_melody()
+        elif scope == "drums":
+            self.seq.clear_drums()
+        else:
+            self.seq.clear_all()
+        self.speaker.say(f"Wyczyszczono {labels[scope]}")
+
+    def show_about(self, event=None):
+        wx.MessageBox(
+            f"{APP_NAME} v{APP_VERSION}\n\n"
+            "Dostępny syntezator 8-bitowy, sekwencer i looper dla Windows.\n"
+            "Łączy wszystkie sprawne funkcje historycznych wersji v5–v14.",
+            "O programie",
+            wx.OK | wx.ICON_INFORMATION,
+        )
+
+    def _export_sequencer_state(self):
+        if self.seq.bpm != self.bpm:
+            self.seq.set_bpm(self.bpm)
+        return self.seq.export_state()
+
+    def _import_sequencer_state(self, state):
+        if not isinstance(state, dict):
+            raise TypeError("Niepoprawny stan sekwencera")
+        normalized = dict(state)
+        # BPM w ustawieniach sesji jest źródłem prawdy. Starsze wersje mogły
+        # zapisać w sekcji sekwencera nieaktualną wartość.
+        normalized["bpm"] = self.bpm
+        self.seq.import_state(normalized)
+
+    def project_state(self):
+        return {
+            "format": PROJECT_FORMAT,
+            "schema": 1,
+            "app_version": APP_VERSION,
+            "settings": {
+                "waveform": self.waveform,
+                "bpm": self.bpm,
+                "octave": self.octave,
+                "sustain": self.synth.sus,
+                "glide": self.synth.glide,
+                "chord": self.chord_mode,
+                "pc_keyboard": self.pc_keyboard,
+                "block_repeat": self.block_repeat,
+                "global_drums": self.global_drums,
+                "fixed_release": self.synth.fix_rel,
+                "volume": self.synth.vol,
+                "layers": sorted(self.synth.layers),
+                "effects": sorted(self.synth.fx),
+                "layer_targets": sorted(self.synth.targets_layer),
+                "effect_targets": sorted(self.synth.targets_fx),
+                "midi": self.midi.current_port_name or self.saved_midi,
+                "audio_device": self.audio_device,
+                "audio_device_name": self.audio_device_name,
+            },
+            "values": dict(self.synth.values),
+            "sequencer": self._export_sequencer_state(),
+        }
+
+    def _validate_project_state(self, state):
+        if not isinstance(state, dict) or state.get("format") != PROJECT_FORMAT:
+            raise ValueError(f"To nie jest projekt {APP_NAME}")
+        try:
+            schema = int(state.get("schema", 0))
+        except (TypeError, ValueError) as error:
+            raise ValueError("Niepoprawna wersja formatu projektu") from error
+        if schema != 1:
+            raise ValueError("Nieobsługiwana wersja formatu projektu")
+
+        settings = state.get("settings", {})
+        values = state.get("values", {})
+        sequencer_state = state.get("sequencer", {})
+        if not isinstance(settings, dict) or not isinstance(values, dict):
+            raise TypeError("Projekt ma niepoprawną strukturę")
+        if not isinstance(sequencer_state, dict):
+            raise TypeError("Projekt ma niepoprawny stan sekwencera")
+
+        waveform = settings.get("waveform", "square")
+        if waveform not in self.wave_items:
+            raise ValueError(f"Nieznany instrument: {waveform}")
+        bpm = int(settings.get("bpm", 120))
+        if not 20 <= bpm <= 300:
+            raise ValueError("BPM projektu musi mieścić się w zakresie 20–300")
+        octave = int(settings.get("octave", 0))
+        if not -3 <= octave <= 3:
+            raise ValueError("Oktawa projektu musi mieścić się w zakresie -3–3")
+
+        for field in ("layers", "effects", "layer_targets", "effect_targets"):
+            entries = settings.get(field, [])
+            if not isinstance(entries, list):
+                raise TypeError(f"Pole {field} musi być listą")
+            if any(not isinstance(entry, str) for entry in entries):
+                raise TypeError(f"Pole {field} może zawierać tylko nazwy")
+
+        validator = synth.Synthesizer(create_stream=False)
+        validator.set_vol(settings.get("volume", 0.2))
+        validator.restore_values(values)
+        sequence_validator = sequencer.Sequencer(validator, bpm=bpm)
+        normalized_sequence = dict(sequencer_state)
+        normalized_sequence["bpm"] = bpm
+        sequence_validator.import_state(normalized_sequence)
+        return settings, values
+
+    def apply_project_state(self, state, restore_devices=False):
+        settings, values = self._validate_project_state(state)
+
+        if self.seq.running:
+            self.seq.stop()
+        for key in tuple(self.punch_in_keys):
+            self.end_punch_in(key)
+        self.key_voices.clear()
+        self.recorded_notes.clear()
+        self.synth.all_notes_off(immediate=True)
+        waveform = settings.get("waveform", "square")
+        self.waveform = waveform
+        self.wave_items[waveform].Check(True)
+        self.set_bpm(int(settings.get("bpm", 120)))
+        self.octave = int(settings.get("octave", 0))
+        self.synth.sus = bool(settings.get("sustain", True))
+        self.synth.glide = bool(settings.get("glide", False))
+        self.chord_mode = bool(settings.get("chord", False))
+        self.pc_keyboard = bool(settings.get("pc_keyboard", True))
+        self.block_repeat = bool(settings.get("block_repeat", True))
+        self.global_drums = bool(settings.get("global_drums", True))
+        self.synth.fix_rel = bool(settings.get("fixed_release", True))
+        self.synth.set_vol(float(settings.get("volume", 0.2)))
+
+        valid_layers = set(self.layer_items)
+        valid_effects = set(self.effect_items)
+        self.synth.layers = set(settings.get("layers", ())) & valid_layers
+        self.synth.fx = set(settings.get("effects", ())) & valid_effects
+        self.synth.targets_layer = (
+            set(settings.get("layer_targets", ())) & self.synth.layers
+        )
+        self.synth.targets_fx = (
+            set(settings.get("effect_targets", ())) & self.synth.fx
+        )
+        self.synth.restore_values(values)
+        self._import_sequencer_state(state.get("sequencer", {}))
+        self.saved_midi = str(settings.get("midi", "") or "")
+
+        if restore_devices and settings.get("audio_device") is not None:
+            selected_device = self._resolve_audio_device(
+                settings.get("audio_device"),
+                settings.get("audio_device_name", ""),
+            )
+            self.synth.change_output_device(selected_device)
+            self.audio_device = selected_device
+            self.audio_device_name = str(
+                sd.query_devices(selected_device)["name"]
+            )
+
+        for code, item in self.layer_items.items():
+            item.Check(code in self.synth.layers)
+        for code, item in self.effect_items.items():
+            item.Check(code in self.synth.fx)
+        self._set_default_checks()
+        self._update_control_ui()
+        self.update_status()
+
+    def save_project(self, event=None):
+        dialog = wx.FileDialog(
+            self,
+            "Zapisz projekt v15",
+            wildcard=f"Projekt {APP_NAME} (*.po15)|*.po15",
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+        )
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            path = Path(dialog.GetPath())
+        finally:
+            dialog.Destroy()
+        if path.suffix.lower() != ".po15":
+            path = path.with_suffix(".po15")
+        try:
+            path.write_text(
+                json.dumps(self.project_state(), ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            self.speaker.say(f"Zapisano projekt {path.name}")
+        except Exception as error:  # noqa: BLE001 - granica zapisu pliku użytkownika
+            wx.MessageBox(str(error), "Błąd zapisu", wx.OK | wx.ICON_ERROR)
+
+    def open_project(self, event=None):
+        dialog = wx.FileDialog(
+            self,
+            "Otwórz projekt v15",
+            wildcard=f"Projekt {APP_NAME} (*.po15)|*.po15",
+            style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST,
+        )
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            path = Path(dialog.GetPath())
+        finally:
+            dialog.Destroy()
+        try:
+            state = json.loads(path.read_text(encoding="utf-8"))
+            self.apply_project_state(state, restore_devices=False)
+            self.speaker.say(f"Wczytano projekt {path.name}")
+        except Exception as error:  # noqa: BLE001 - walidacja całego pliku projektu
+            wx.MessageBox(str(error), "Błąd projektu", wx.OK | wx.ICON_ERROR)
+
+    def export_wav(self, event=None):
+        dialog = wx.FileDialog(
+            self,
+            "Zapisz WAV",
+            wildcard="WAV (*.wav)|*.wav",
+            style=wx.FD_SAVE | wx.FD_OVERWRITE_PROMPT,
+        )
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            path = Path(dialog.GetPath())
+        finally:
+            dialog.Destroy()
+
+        if path.suffix.lower() != ".wav":
+            path = path.with_suffix(".wav")
+        loops = wx.GetNumberFromUser(
+            "Ile pętli wyeksportować?",
+            "Liczba:",
+            "Eksport WAV",
+            4,
+            1,
+            99,
+            self,
+        )
+        if loops == -1:
+            return
+        melody, drums = self.seq.snapshot()
+        try:
+            with wx.BusyInfo("Eksportowanie dźwięku..."):
+                self.synth.render_to_wav(
+                    str(path), melody, drums, self.bpm, loops
+                )
+            wx.MessageBox("Zapisano plik WAV.", "Eksport", wx.OK)
+        except Exception as error:  # noqa: BLE001 - błąd eksportu ma trafić do UI
+            wx.MessageBox(str(error), "Błąd eksportu", wx.OK | wx.ICON_ERROR)
+
+    def select_audio_device(self, event=None):
+        try:
+            devices = sd.query_devices()
+            output_indexes = [
+                index
+                for index, device in enumerate(devices)
+                if device["max_output_channels"] > 0
+            ]
+        except Exception as error:  # noqa: BLE001 - backend PortAudio
+            wx.MessageBox(str(error), "Błąd audio", wx.OK | wx.ICON_ERROR)
+            return
+        if not output_indexes:
+            wx.MessageBox("Brak urządzeń wyjściowych audio.")
+            return
+
+        choices = [
+            f"{index}: {devices[index]['name']}" for index in output_indexes
+        ]
+        dialog = wx.SingleChoiceDialog(
+            self, "Wybierz urządzenie:", "Wyjście audio", choices
+        )
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            selected = output_indexes[dialog.GetSelection()]
+        finally:
+            dialog.Destroy()
+        try:
+            self.synth.change_output_device(selected)
+            if not self.synth.running:
+                self.synth.start()
+            self.audio_device = selected
+            self.audio_device_name = str(devices[selected]["name"])
+            self.speaker.say(f"Wyjście audio {devices[selected]['name']}")
+        except Exception as error:  # noqa: BLE001 - backend PortAudio
+            wx.MessageBox(str(error), "Błąd audio", wx.OK | wx.ICON_ERROR)
+
+    def open_saved_midi(self):
+        if self.saved_midi:
+            self.midi.open_port(self.saved_midi)
+        else:
+            self.midi.open_port()
+
+    @staticmethod
+    def _resolve_audio_device(saved_index, saved_name=""):
+        devices = sd.query_devices()
+        if saved_name:
+            for index, device in enumerate(devices):
+                if (
+                    device["max_output_channels"] > 0
+                    and device["name"] == saved_name
+                ):
+                    return index
+        index = int(saved_index)
+        if not 0 <= index < len(devices):
+            raise ValueError("Zapisany indeks urządzenia audio jest poza zakresem")
+        if devices[index]["max_output_channels"] <= 0:
+            raise ValueError("Zapisane urządzenie nie ma kanałów wyjściowych")
+        return index
+
+    def select_midi_device(self, event=None):
+        ports = self.midi.get_ports()
+        if not ports:
+            wx.MessageBox("Brak dostępnych wejść MIDI.")
+            return
+        dialog = wx.SingleChoiceDialog(
+            self, "Wybierz wejście:", "MIDI", ports
+        )
+        try:
+            if dialog.ShowModal() != wx.ID_OK:
+                return
+            selected = dialog.GetStringSelection()
+        finally:
+            dialog.Destroy()
+        if self.midi.open_port(selected):
+            self.saved_midi = selected
+            self.speaker.say(f"MIDI {selected}")
+        else:
+            wx.MessageBox("Nie udało się otworzyć wejścia MIDI.")
+
+    def refresh_midi(self, event=None):
+        port = self.saved_midi or self.midi.current_port_name
+        if self.midi.open_port(port):
+            self.saved_midi = self.midi.current_port_name or ""
+            self.speaker.say("MIDI odświeżone")
+        else:
+            self.speaker.say("Brak wejścia MIDI")
+
+    def load_settings(self):
+        if not CONFIG_PATH.exists():
+            return
+        config = configparser.ConfigParser(interpolation=None)
+        try:
+            config.read(CONFIG_PATH, encoding="utf-8")
+            settings = config["SETTINGS"]
+            waveform = settings.get("wave", "square")
+            if waveform in self.wave_items:
+                self.waveform = waveform
+                self.wave_items[waveform].Check(True)
+            self.set_bpm(settings.getint("bpm", 120))
+            self.octave = max(-3, min(3, settings.getint("oct", 0)))
+            self.synth.set_vol(settings.getfloat("vol", 0.2))
+            self.synth.sus = settings.getboolean("sus", True)
+            self.synth.glide = settings.getboolean("glide", False)
+            self.synth.fix_rel = settings.getboolean("lrel", True)
+            self.chord_mode = settings.getboolean("chord", False)
+            self.pc_keyboard = settings.getboolean("pc", True)
+            self.block_repeat = settings.getboolean("br", True)
+            self.global_drums = settings.getboolean("gd", True)
+            self.saved_midi = settings.get("midi", "")
+
+            valid_layers = set(self.layer_items)
+            valid_effects = set(self.effect_items)
+            self.synth.layers = {
+                value
+                for value in settings.get("lays", "").split(",")
+                if value in valid_layers
+            }
+            self.synth.fx = {
+                value
+                for value in settings.get("fx", "").split(",")
+                if value in valid_effects
+            }
+            self.synth.targets_layer = {
+                value
+                for value in settings.get("tgt_l", "").split(",")
+                if value in self.synth.layers
+            }
+            self.synth.targets_fx = {
+                value
+                for value in settings.get("tgt_f", "").split(",")
+                if value in self.synth.fx
+            }
+
+            if "VALUES" in config:
+                self.synth.restore_values(dict(config["VALUES"]))
+
+            if "SEQUENCER" in config and config["SEQUENCER"].get("state"):
+                try:
+                    self._import_sequencer_state(
+                        json.loads(config["SEQUENCER"].get("state"))
+                    )
+                except (json.JSONDecodeError, TypeError, ValueError) as error:
+                    print(f"Pominięto uszkodzony stan sekwencera: {error}")
+
+            audio_device = settings.get("audio", "")
+            if audio_device:
+                try:
+                    selected_device = self._resolve_audio_device(
+                        audio_device, settings.get("audio_name", "")
+                    )
+                    self.synth.change_output_device(selected_device)
+                    self.audio_device = selected_device
+                    self.audio_device_name = str(
+                        sd.query_devices(selected_device)["name"]
+                    )
+                except (TypeError, ValueError, sd.PortAudioError) as error:
+                    print(f"Pominięto niedostępne urządzenie audio: {error}")
+
+            for code, item in self.layer_items.items():
+                item.Check(code in self.synth.layers)
+            for code, item in self.effect_items.items():
+                item.Check(code in self.synth.fx)
+            self._set_default_checks()
+            self._update_control_ui()
+        except Exception as error:  # noqa: BLE001 - zgodność ze starszym po.ini
+            print(f"Błąd odczytu konfiguracji: {error}")
+            self.speaker.say("Nie udało się wczytać konfiguracji")
+
+    def save_settings(self):
+        config = configparser.ConfigParser(interpolation=None)
+        config["SETTINGS"] = {
+            "version": APP_VERSION,
+            "wave": self.waveform,
+            "bpm": str(self.bpm),
+            "oct": str(self.octave),
+            "sus": str(self.synth.sus),
+            "glide": str(self.synth.glide),
+            "chord": str(self.chord_mode),
+            "pc": str(self.pc_keyboard),
+            "br": str(self.block_repeat),
+            "gd": str(self.global_drums),
+            "lrel": str(self.synth.fix_rel),
+            "vol": str(self.synth.vol),
+            "lays": ",".join(sorted(self.synth.layers)),
+            "fx": ",".join(sorted(self.synth.fx)),
+            "tgt_l": ",".join(sorted(self.synth.targets_layer)),
+            "tgt_f": ",".join(sorted(self.synth.targets_fx)),
+            "midi": self.midi.current_port_name or self.saved_midi,
+            "audio": "" if self.audio_device is None else str(self.audio_device),
+            "audio_name": self.audio_device_name,
+        }
+        config["VALUES"] = {
+            key: str(value) for key, value in self.synth.values.items()
+        }
+        config["SEQUENCER"] = {
+            "state": json.dumps(
+                self._export_sequencer_state(),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+        }
+        with CONFIG_PATH.open("w", encoding="utf-8") as config_file:
+            config.write(config_file)
+
+    def factory_reset(self, event=None):
+        answer = wx.MessageBox(
+            "Usunąć wszystkie zapisane ustawienia?",
+            "Reset fabryczny",
+            wx.YES_NO | wx.NO_DEFAULT | wx.ICON_WARNING,
+        )
+        if answer != wx.YES:
+            return
+        self._skip_save = True
+        if CONFIG_PATH.exists():
+            CONFIG_PATH.unlink()
+        self.speaker.say("Ustawienia fabryczne przywrócone")
+        self.Close()
+
+    def on_close(self, event=None):
+        if self._closing:
+            return
+        self._closing = True
+        for key in tuple(self.punch_in_keys):
+            self.end_punch_in(key)
+        self._close_recorded_notes()
+        try:
+            if not self._skip_save:
+                self.save_settings()
+        except Exception as error:  # noqa: BLE001 - zamykanie musi dojść do finally
+            print(f"Błąd zapisu konfiguracji: {error}")
+        finally:
+            self.seq.stop()
+            self.midi.stop()
+            self.synth.stop()
+            self.Destroy()
+
+    # Nazwy zachowane dla zgodności z wcześniejszymi skryptami.
+    kd = on_key_down
+    ku = on_key_up
+    ply = toggle_playback
+    rec = toggle_recording
+    cl = on_close
+    load = load_settings
+    mi = open_saved_midi
+
+
+if __name__ == "__main__":
+    app = wx.App()
+    frame = MainFrame()
+    frame.Show()
+    app.MainLoop()

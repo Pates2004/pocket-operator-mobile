@@ -1,0 +1,7 @@
+wxPython
+numpy
+sounddevice
+mido
+python-rtmidi
+scipy
+accessible-output2
