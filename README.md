@@ -1,4 +1,4 @@
-# Pocket Operator mobile v16.1
+# Pocket Operator mobile v16.2
 
 [English documentation](README.en.md)
 
@@ -15,6 +15,9 @@ wyłącznie klawiaturą oraz czytnikiem ekranu.
 
 Wersja 16.1 ujednolica informacje głosowe o zmianach z MIDI i klawiatury
 komputerowej. Każde źródło można niezależnie włączyć lub wyłączyć.
+Wersja 16.2 dodaje muzyczny Pitch Bend ±2 półtony, nagrywanie jego ruchów oraz
+wyłączanie pojedynczych przypisań bez ich usuwania. Gotowe profile AKM322 i NI
+są częścią źródeł na GitHubie i każdego portable.
 
 ## Najważniejsze możliwości
 
@@ -380,6 +383,29 @@ Ręcznie można też podać typ komunikatu, numer i kanał. Kanały w oknie maj�
 Mapowanie tego samego źródła zastępuje poprzednie. Przycisk „Usuń wybrane
 mapowanie” usuwa tylko wskazaną pozycję. Zmiany zapisywane są od razu w INI.
 
+Aby czasowo wyłączyć wpis, zaznacz go na liście, odznacz `Przypisanie włączone`
+i wybierz `Zapisz mapowanie`. Wpis pozostanie na liście jako wyłączony; ponowne
+zaznaczenie pola i zapis go przywrócą. Wyłączony wpis ignoruje odpowiadający mu
+sygnał, również gdy pochodzi on z pada/nuty. Usunięcie wpisu pozwala z kolei
+wrócić do zwykłej interpretacji MIDI dla danej nuty lub pedału.
+Wyłączone i usunięte mapowania nie są samoczynnie przywracane przy restarcie.
+Ręczne wczytanie profilu zastępuje listę jego domyślnymi, włączonymi wpisami.
+
+### Kółko lub pasek Pitch Bend
+
+Fabryczne profile przypisują komunikat `Pitch Bend` do muzycznego odstrajania
+nut MIDI w zakresie ±2 półtonów. Środek dokładnie przywraca normalną wysokość.
+Działa to na już grające i kolejne nuty danego kanału, także podczas Glide;
+nuty z klawiatury komputerowej i pozostałe kanały nie są odstrajane.
+Zmiany są nagrywane w looperze, zapisywane w projekcie i renderowane do WAV.
+Zatrzymanie pętli, PANIC, zamknięcie portu oraz zmiana/wyłączenie przypisania
+przywracają normalny strój. Zapobiega to pozostawieniu odstrojenia po wyłączeniu
+kółka w połowie ruchu.
+
+Własne przypisanie Pitch Bend można wyłączyć, usunąć albo zastąpić innym działaniem.
+Dla działania muzycznego Pitch Bend wybierz tryb bezwzględny. Profile NI zachowują
+ten bezwzględny tryb kółka również wtedy, gdy ich gałki pracują względnie.
+
 Obsługiwane źródła: CC, Note On/Off (np. pady), Program Change, Pitch Bend,
 Channel Pressure, Start/Continue/Stop oraz MIDI Machine Control (MMC) przez
 Universal Realtime SysEx. Przypisana nuta działa jako przycisk i nie gra dźwięku;
@@ -411,6 +437,7 @@ przechwyceniu komunikatów. Można też wybrać go ręcznie przyciskiem profilu.
 | Kontroler | Komunikat | Domyślne działanie |
 | --- | --- | --- |
 | Enkoder DATA | CC10 bezwzględny | Instrument A |
+| Lewe sprężynujące kółko | Pitch Bend | Odstrojenie nut MIDI ±2 półtony |
 | Gałka 1 | CC21 | Instrument B |
 | Gałka 2 | CC22 | Warstwy A |
 | Gałka 3 | CC23 | Efekty A |
@@ -430,6 +457,11 @@ do komputera, nie może być przejęty przez program. Po przeprogramowaniu kontr
 użyj nauki lub zmień odpowiedni wpis. [Instrukcja producenta AKM322](https://www.midiplus.com.tw/cn/MIDIPLUS-Download-detail/0/Manual_Of_AKM322_EN/)
 opisuje programowanie gałek, enkodera i przycisków transportu.
 
+Nieedytowany profil AKM322 z v16.0/v16.1 jest przy aktualizacji rozszerzany o kółko.
+Niestandardowe listy nie są nadpisywane. W razie potrzeby można samemu dodać Pitch
+Bend przez naukę albo ponownie wczytać profil AKM322. W v16.2 usunięte/wyłączone
+przypisania są już zapamiętywane bez ich ponownego dodawania.
+
 ### Native Instruments
 
 Kontroler musi działać w zwykłym trybie MIDI. Dla M32, A-Series i S-Series MK2
@@ -444,6 +476,15 @@ Znaczenie względnych wartości pochodzi z
 [dokumentacji Native Instruments](https://docs.native-instruments.com/online-guides/komplete-kontrol-manual/en/automation-and-midi-control.html).
 Protokół NKS, wyświetlacze, diody i zastrzeżone tryby DAW/HID nie są implementowane.
 Nie testowano fizycznej klawiatury NI; algorytmy i routing sprawdzają testy.
+
+Nowe konfiguracje wykrywają po nazwie portu KOMPLETE/KONTROL/Native Instruments
+i wybierają profil `NI CC14–21 Absolute`. Jeśli dostępny jest zwykły port muzyczny,
+ma pierwszeństwo przed portem DAW. W profilu CC14–21 sterują kolejno instrumentem
+A/B, warstwami A/B, efektami A/B, głośnością i BPM; CC1 steruje FX B, kółko Pitch
+Bend odstrajaniem, a komunikaty realtime i MMC transportem.
+Układ CC14–21 pokazuje [oficjalna instrukcja M32](https://docs.native-instruments.com/pdf-guides/komplete_kontrol/KOMPLETE_KONTROL_M32_Manual_English_200127.pdf).
+To gotowy punkt startowy, nie rozpoznanie dowolnego zmienionego szablonu NI.
+Zapisane własne lub celowo puste mapowania mają pierwszeństwo przed automatyką.
 
 ## Total Recall i pliki projektów
 
@@ -485,6 +526,8 @@ urządzenie. Nazwa MIDI i indeks audio pozostają zapisane w projekcie jako
 informacja Total Recall.
 
 Format ma identyfikator `pocket-operator-mobile-project` oraz wersję schematu.
+V16.2 zapisuje schemat 2 i czyta również schemat 1. Nowszy schemat chroni przed
+otwarciem wyłączonych mapowań jako aktywnych w starszej wersji programu.
 Niepoprawne lub przyszłe, nieobsługiwane schematy są odrzucane z komunikatem,
 zamiast częściowo nadpisywać sesję.
 
@@ -530,6 +573,7 @@ zamiast częściowo nadpisywać sesję.
 | `test_launch.py` | Testy silnika, MIDI, sekwencera, UI i Total Recall. |
 | `GEMINI.md` | Historia rozwoju projektu. |
 | `test_v16.py` | Testy konfiguracji, mapowań, języków i regresji MIDI. |
+| `test_pitch_mapping.py` | Strojenie, środek kółka, kanały, profile i wyłączanie przypisań. |
 | `feedback.py`, `test_feedback.py` | Polityka mowy źródeł i regresje rzeczywistych zmian/końcowej wartości. |
 | `build_release.py` | Powtarzalna kompilacja portable, z pracą poza źródłami. |
 | `Installfiles/` | Lokalne aktualne portable; ignorowane przez Git. |

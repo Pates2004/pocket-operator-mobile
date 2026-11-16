@@ -57,6 +57,8 @@ class Oscillator:
     ):
         self.target_freq = target_freq
         self.current_freq = start_freq if start_freq is not None else target_freq
+        self.pitch_ratio = 1.0
+        self.midi_channel = None
         self.sample_rate = sample_rate
         self.waveform = waveform
         self.layers = set(layers or ())
@@ -90,7 +92,7 @@ class Oscillator:
             else:
                 self.current_freq += self.glide_step * np.sign(difference)
 
-        phase_increment = self.current_freq / self.sample_rate
+        phase_increment = self.current_freq * self.pitch_ratio / self.sample_rate
         sample_index = np.arange(sample_count)
         main_phase = sample_index * phase_increment + self.phase
         self.phase = (main_phase[-1] + phase_increment) % 1.0
@@ -331,6 +333,7 @@ class Synthesizer:
         self.shots = []
         self.lock = threading.RLock()
         self.last_freq = None
+        self.pitch_bends = {}
         self.glide = False
         self.sus = True
         self.fix_rel = True
@@ -676,6 +679,10 @@ class Synthesizer:
                 self.layers.copy(),
             )
             oscillator.params.update(self.values)
+            oscillator.midi_channel = self.midi_channel_for_key(key)
+            oscillator.pitch_ratio = 2 ** (
+                self.pitch_bends.get(oscillator.midi_channel, 0.0) / 12.0
+            )
             oscillator.sustain = self.sus
             oscillator.fix_rel = self.fix_rel
             oscillator.volume = 0.5 * velocity
@@ -688,6 +695,40 @@ class Synthesizer:
             if oscillator is not None:
                 oscillator.releasing = True
 
+    @staticmethod
+    def midi_channel_for_key(key):
+        if type(key) is int:
+            return 0
+        if isinstance(key, tuple) and len(key) == 3 and key[0] == "midi":
+            return key[1]
+        return None
+
+    def get_pitch_bend(self, channel=0):
+        with self.lock:
+            return self.pitch_bends.get(channel, 0.0)
+
+    def set_pitch_bend(self, semitones, channel=0):
+        if type(channel) is not int or not 0 <= channel <= 15:
+            raise ValueError("MIDI channel must be 0..15")
+        semitones = _clamp(semitones, -48.0, 48.0, "Pitch Bend")
+        with self.lock:
+            previous = self.pitch_bends.get(channel, 0.0)
+            if semitones:
+                self.pitch_bends[channel] = semitones
+            else:
+                self.pitch_bends.pop(channel, None)
+            ratio = 2 ** (semitones / 12.0)
+            for oscillator in self.oscs.values():
+                if oscillator.midi_channel == channel:
+                    oscillator.pitch_ratio = ratio
+            return previous != semitones
+
+    def reset_pitch_bend(self):
+        with self.lock:
+            self.pitch_bends.clear()
+            for oscillator in self.oscs.values():
+                oscillator.pitch_ratio = 1.0
+
     def silence_note(self, key):
         with self.lock:
             self.oscs.pop(key, None)
@@ -695,6 +736,7 @@ class Synthesizer:
     def all_notes_off(self, immediate=False):
         with self.lock:
             if immediate:
+                self.reset_pitch_bend()
                 self.oscs.clear()
                 self.shots.clear()
                 self.delay_buffer.fill(0.0)
@@ -919,6 +961,8 @@ class Synthesizer:
                     )
                 elif event_type == "note_off" and payload:
                     renderer.note_off(payload["key"])
+                elif event_type == "pitch_bend" and payload:
+                    renderer.set_pitch_bend(payload["semitones"], payload["channel"])
                 event_index += 1
             if cursor < block_end:
                 output[cursor:block_end] = renderer.generate_block(block_end - cursor)

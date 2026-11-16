@@ -150,6 +150,15 @@ class MidiInputHandler:
         self.sustain_channels.clear()
         self.synth.all_notes_off(immediate=immediate)
 
+    def reset_controls(self):
+        for note in tuple(self.deferred_note_offs):
+            self._release_note(note)
+        self.deferred_note_offs.clear()
+        self.sustain_channels.clear()
+        self.sustain_pedal = False
+        if hasattr(self.synth, "reset_pitch_bend"):
+            self.synth.reset_pitch_bend()
+
     def _listen_loop(self, port, stop_event):
         while not stop_event.is_set():
             try:
@@ -182,3 +191,4 @@ class MidiInputHandler:
         self.deferred_note_offs.clear()
         self.active_notes.clear()
         self.current_port_name = None
+        self.reset_controls()

@@ -23,6 +23,7 @@ CONTINUOUS_ACTIONS = {
     "fx_b",
     "volume",
     "bpm",
+    "pitch_bend",
 }
 BUTTON_ACTIONS = {
     "play",
@@ -100,6 +101,10 @@ def validate_binding(raw):
     mode, action = binding.get("mode", "absolute"), binding.get("action")
     if mode not in MODES or action not in ACTIONS:
         raise ValueError("Unsupported MIDI action or mode")
+    if action == "pitch_bend" and mode != "absolute":
+        raise ValueError("Pitch Bend requires absolute mode")
+    if type(binding.get("enabled", True)) is not bool:
+        raise ValueError("Mapping enabled flag must be true or false")
     if action in BUTTON_ACTIONS and mode not in {"button", "momentary"}:
         raise ValueError("Button actions require button or momentary mode")
     if mode == "momentary" and not action.startswith(("effect:", "layer:")):
@@ -117,6 +122,7 @@ def validate_binding(raw):
         "action": action,
         "step": step,
         "invert": bool(binding.get("invert", False)),
+        "enabled": binding.get("enabled", True),
     }
 
 
@@ -145,11 +151,13 @@ def profile(name):
             binding(("mmc", 2), "play", "button"),
             binding(("mmc", 1), "stop", "button"),
             binding(("mmc", 6), "record", "button"),
+            binding(("pitch", 0), "pitch_bend"),
         ]
-    if name not in {"generic", "ni_relative", "ni_offset"}:
+    if name not in {"generic", "ni_absolute", "ni_relative", "ni_offset"}:
         raise ValueError("Unknown MIDI profile")
     mode = {
         "generic": "absolute",
+        "ni_absolute": "absolute",
         "ni_relative": "relative_twos",
         "ni_offset": "relative_offset",
     }[name]
@@ -166,9 +174,41 @@ def profile(name):
             binding(("start", 0), "play", "button"),
             binding(("continue", 0), "play", "button"),
             binding(("stop", 0), "stop", "button"),
+            binding(("pitch", 0), "pitch_bend"),
+            binding(("cc", 1), "fx_b"),
+            binding(("mmc", 2), "play", "button"),
+            binding(("mmc", 1), "stop", "button"),
+            binding(("mmc", 6), "record", "button"),
         ]
     )
     return result
+
+
+def detect_profile(port_name):
+    name = port_name.casefold()
+    if "akm322" in name:
+        return "akm322"
+    if any(token in name for token in ("komplete", "kontrol", "native instruments")):
+        return "ni_absolute"
+    return None
+
+
+def preferred_port(ports):
+    # NI DAW control endpoints are distinct from ordinary musical MIDI inputs.
+    musical = [port for port in ports if "daw" not in port.casefold()]
+    return next(
+        (port for port in musical if detect_profile(port)),
+        musical[0] if musical else (ports[0] if ports else ""),
+    )
+
+
+def upgrade_legacy_profile(state, port_name, version):
+    normalized = [validate_binding(item) for item in state]
+    if version < 2 and detect_profile(port_name) == "akm322":
+        expected = [item for item in profile("akm322") if item["type"] != "pitch"]
+        if normalized == expected:
+            return profile("akm322")
+    return normalized
 
 
 def relative_delta(value, mode):
@@ -182,13 +222,21 @@ def relative_delta(value, mode):
 
 
 class MidiMapper:
-    def __init__(self, dispatch):
+    def __init__(self, dispatch, *, pitch_callback=None, on_change=None):
         self.dispatch = dispatch
+        self.pitch_callback = pitch_callback
+        self.on_change = on_change
         self.bindings = []
         self.monitor = None
         self.learn_callback = None
         self.lock = threading.RLock()
         self._pressed = set()
+        self.generation = 0
+
+    def invalidate_pending(self):
+        with self.lock:
+            self.generation += 1
+            self._pressed.clear()
 
     def export_state(self):
         with self.lock:
@@ -205,7 +253,9 @@ class MidiMapper:
             raise ValueError("Duplicate MIDI source")
         with self.lock:
             self.bindings = normalized
-            self._pressed.clear()
+            self.invalidate_pending()
+        if self.on_change:
+            self.on_change()
 
     def add(self, item):
         item = validate_binding(item)
@@ -247,6 +297,8 @@ class MidiMapper:
                 (entry for entry in matches if entry["channel"] == source[1]),
                 matches[0],
             )
+            if not item["enabled"]:
+                return True
             mode = item["mode"]
             if mode in {"button", "momentary"}:
                 pressed = value > 0
@@ -264,13 +316,18 @@ class MidiMapper:
                         float(pressed),
                     )
             elif mode == "absolute":
-                maximum = 16383 if source[0] == "pitch" else 127
-                normalized = value / maximum
-                self.dispatch(
-                    item["action"],
-                    "absolute",
-                    1 - normalized if item["invert"] else normalized,
-                )
+                if source[0] == "pitch":
+                    signed = value - 8192
+                    normalized = 0.5 + signed / (8191 if signed >= 0 else 8192) / 2
+                else:
+                    normalized = value / 127
+                normalized = 1 - normalized if item["invert"] else normalized
+                if item["action"] == "pitch_bend" and self.pitch_callback:
+                    self.pitch_callback(
+                        source[1] if source[1] is not None else 0, normalized
+                    )
+                else:
+                    self.dispatch(item["action"], "absolute", normalized)
             else:
                 delta = relative_delta(value, mode) * item["step"]
                 if item["invert"]:

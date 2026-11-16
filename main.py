@@ -27,7 +27,7 @@ except ImportError:
 
 
 APP_NAME = "Pocket Operator mobile"
-APP_VERSION = "16.1"
+APP_VERSION = "16.2"
 PROJECT_FORMAT = "pocket-operator-mobile-project"
 BASE_DIR = APP_DIR
 CONFIG_PATH = BASE_DIR / "po.ini"
@@ -250,9 +250,13 @@ class MainFrame(wx.Frame):
 
         self.seq = sequencer.Sequencer(self.synth)
         self.mapper = midi_mapping.MidiMapper(
-            lambda action, mode, value: wx.CallAfter(
+            lambda action, mode, value: self.queue_midi(
                 self.handle_midi_action, action, mode, value
-            )
+            ),
+            pitch_callback=lambda channel, value: self.queue_midi(
+                self.handle_pitch_bend, channel, value
+            ),
+            on_change=self.reset_midi_controls,
         )
         self.midi = midi_handler.MidiInputHandler(
             self.synth,
@@ -270,6 +274,7 @@ class MainFrame(wx.Frame):
         self.key_voices = {}
         self.punch_in_keys = {}
         self.recorded_notes = set()
+        self.recorded_bend_channels = set()
         self.saved_midi = ""
         self.midi_profile_initialized = False
         self.midi_gates = {}
@@ -651,6 +656,61 @@ class MainFrame(wx.Frame):
         with MidiMappingDialog(self) as dialog:
             dialog.ShowModal()
 
+    def reset_midi_controls(self):
+        if self._closing:
+            return
+        self.feedback.cancel_pending()
+        self.mapper.invalidate_pending()
+        previous_bends = dict(self.synth.pitch_bends)
+        if hasattr(self, "midi"):
+            self.midi.reset_controls()
+        else:
+            self.synth.reset_pitch_bend()
+        if self.seq.recording:
+            for channel in previous_bends:
+                self.seq.record_event(
+                    "pitch_bend", {"channel": channel, "semitones": 0.0}
+                )
+        for action, was_active in self.midi_gates.items():
+            group, code = action.split(":")
+            active = self.synth.layers if group == "layer" else self.synth.fx
+            items = self.layer_items if group == "layer" else self.effect_items
+            if not was_active:
+                active.discard(code)
+            items[code].Check(code in active)
+        self.midi_gates.clear()
+        self._update_control_ui()
+
+    def queue_midi(self, callback, *args):
+        wx.CallAfter(self.apply_queued_midi, self.mapper.generation, callback, args)
+
+    def apply_queued_midi(self, generation, callback, args):
+        if not self._closing and generation == self.mapper.generation:
+            callback(*args)
+
+    def handle_pitch_bend(self, channel, value):
+        if self._closing:
+            return
+        semitones = (float(value) - 0.5) * 4.0
+        if self.synth.set_pitch_bend(semitones, channel):
+            if self.seq.recording:
+                self.recorded_bend_channels.add(channel)
+                self.seq.record_event(
+                    "pitch_bend", {"channel": channel, "semitones": semitones}
+                )
+            with self.feedback.using_source("midi", continuous=True):
+                self.feedback.announce(
+                    tr(
+                        "Pitch Bend, channel {channel}: {value} semitones",
+                        channel=channel + 1,
+                        value=f"{semitones:+.2f}",
+                    )
+                )
+
+    def save_midi_mappings(self):
+        self.midi_profile_initialized = True
+        self.save_settings()
+
     def toggle_feedback(self, source):
         enabled = not self.feedback.enabled[source]
         self.feedback.set_enabled(source, enabled)
@@ -690,7 +750,9 @@ class MainFrame(wx.Frame):
 
     def _apply_midi_action(self, action, mode, value):
         relative = mode == "relative"
-        if action in {"main_a", "main_b", "layer_a", "layer_b", "fx_a", "fx_b"}:
+        if action == "pitch_bend":
+            self.handle_pitch_bend(0, value)
+        elif action in {"main_a", "main_b", "layer_a", "layer_b", "fx_a", "fx_b"}:
             target, parameter = action.rsplit("_", 1)
             if relative:
                 self.change_knob(target, parameter, delta=value)
@@ -1004,6 +1066,8 @@ class MainFrame(wx.Frame):
         if not enabled:
             self._close_recorded_notes()
         self.seq.set_recording(enabled)
+        if enabled:
+            self.recorded_bend_channels.clear()
         self.feedback.announce(
             "Nagrywanie włączone" if enabled else "Nagrywanie wyłączone"
         )
@@ -1053,6 +1117,20 @@ class MainFrame(wx.Frame):
     def record_midi_event(self, event_type, note):
         note_key = note.get("key")
         if event_type == "note_on":
+            channel = self.synth.midi_channel_for_key(note_key)
+            if (
+                self.seq.recording
+                and channel is not None
+                and channel not in self.recorded_bend_channels
+            ):
+                self.recorded_bend_channels.add(channel)
+                self.seq.record_event(
+                    "pitch_bend",
+                    {
+                        "channel": channel,
+                        "semitones": self.synth.get_pitch_bend(channel),
+                    },
+                )
             self.seq.record_event(event_type, note)
             if self.seq.recording:
                 self.recorded_notes.add(note_key)
@@ -1089,6 +1167,7 @@ class MainFrame(wx.Frame):
             self._update_control_ui()
 
     def panic(self, event=None):
+        self.reset_midi_controls()
         for key in tuple(self.punch_in_keys):
             self.end_punch_in(key)
         for key in tuple(self.key_voices):
@@ -1469,10 +1548,12 @@ class MainFrame(wx.Frame):
             return
         if scope == "melody":
             self.seq.clear_melody()
+            self.recorded_bend_channels.clear()
         elif scope == "drums":
             self.seq.clear_drums()
         else:
             self.seq.clear_all()
+            self.recorded_bend_channels.clear()
         self.speaker.say(f"Wyczyszczono {labels[scope]}")
 
     def show_about(self, event=None):
@@ -1501,7 +1582,7 @@ class MainFrame(wx.Frame):
     def project_state(self):
         return {
             "format": PROJECT_FORMAT,
-            "schema": 1,
+            "schema": 2,
             "app_version": APP_VERSION,
             "settings": {
                 "waveform": self.waveform,
@@ -1535,7 +1616,7 @@ class MainFrame(wx.Frame):
             schema = int(state.get("schema", 0))
         except (TypeError, ValueError) as error:
             raise ValueError("Niepoprawna wersja formatu projektu") from error
-        if schema != 1:
+        if schema not in {1, 2}:
             raise ValueError("Nieobsługiwana wersja formatu projektu")
 
         settings = state.get("settings", {})
@@ -1745,18 +1826,19 @@ class MainFrame(wx.Frame):
             ui_support.message_box(str(error), "Błąd audio", wx.OK | wx.ICON_ERROR)
 
     def open_saved_midi(self):
-        if not self.midi_profile_initialized:
-            ports = self.midi.get_ports()
-            selected = self.saved_midi or (ports[0] if ports else "")
-            if "AKM322" in selected.upper():
-                self.mapper.import_state(midi_mapping.profile("akm322"))
-                self.midi_profile_initialized = True
-        if self.saved_midi:
-            self.midi.open_port(self.saved_midi)
-        else:
-            self.midi.open_port()
+        ports = self.midi.get_ports()
+        selected = self.saved_midi or midi_mapping.preferred_port(ports)
+        self.initialize_midi_profile(selected)
+        self.midi.open_port(selected or None)
         if self.midi.last_error:
             self.speaker.say(self.midi.last_error)
+
+    def initialize_midi_profile(self, port_name):
+        if not self.midi_profile_initialized:
+            name = midi_mapping.detect_profile(port_name)
+            if name:
+                self.mapper.import_state(midi_mapping.profile(name))
+                self.midi_profile_initialized = True
 
     @staticmethod
     def _resolve_audio_device(saved_index, saved_name=""):
@@ -1785,7 +1867,9 @@ class MainFrame(wx.Frame):
         finally:
             dialog.Destroy()
         if self.midi.open_port(selected):
+            self.reset_midi_controls()
             self.saved_midi = selected
+            self.initialize_midi_profile(selected)
             self.speaker.say(f"MIDI {selected}")
         else:
             ui_support.message_box("Nie udało się otworzyć wejścia MIDI.")
@@ -1793,7 +1877,9 @@ class MainFrame(wx.Frame):
     def refresh_midi(self, event=None):
         port = self.saved_midi or self.midi.current_port_name
         if self.midi.open_port(port):
+            self.reset_midi_controls()
             self.saved_midi = self.midi.current_port_name or ""
+            self.initialize_midi_profile(self.saved_midi)
             self.speaker.say("MIDI odświeżone")
         else:
             self.speaker.say("Brak wejścia MIDI")
@@ -1856,10 +1942,15 @@ class MainFrame(wx.Frame):
                 self.synth.restore_values(dict(config["VALUES"]))
 
             if config.has_option("MIDI_MAPPINGS", "bindings"):
-                self.mapper.import_state(
-                    json.loads(config["MIDI_MAPPINGS"]["bindings"])
+                state = json.loads(config["MIDI_MAPPINGS"]["bindings"])
+                version = config.getint("MIDI_MAPPINGS", "version", fallback=1)
+                state = midi_mapping.upgrade_legacy_profile(
+                    state, self.saved_midi, version
                 )
-                self.midi_profile_initialized = True
+                self.mapper.import_state(state)
+                self.midi_profile_initialized = config.getboolean(
+                    "MIDI_MAPPINGS", "initialized", fallback=True
+                )
 
             if "SEQUENCER" in config and config["SEQUENCER"].get("state"):
                 try:
@@ -1928,7 +2019,9 @@ class MainFrame(wx.Frame):
             )
         }
         config["MIDI_MAPPINGS"] = {
-            "bindings": json.dumps(self.mapper.export_state(), ensure_ascii=False)
+            "version": "2",
+            "initialized": str(self.midi_profile_initialized),
+            "bindings": json.dumps(self.mapper.export_state(), ensure_ascii=False),
         }
         config["FEEDBACK"] = {
             source: str(enabled) for source, enabled in self.feedback.enabled.items()

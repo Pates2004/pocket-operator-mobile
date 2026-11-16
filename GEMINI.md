@@ -102,7 +102,19 @@ Dokumentacja rozwoju aplikacji syntezatora 8-bitowego, stworzonej w Pythonie (wx
 - Testy potwierdzają wpływ wszystkich gałek AKM322 na przypisane parametry,
   w tym dźwięk release, aktywnej warstwy i aktywnego efektu.
 
-## Struktura Projektu (v16.1)
+## Faza 14: Pitch Bend i zarządzanie przypisaniami (v16.2)
+
+- Dodano muzyczny Pitch Bend ±2 półtony dla bieżących i kolejnych nut kanału MIDI,
+  z dokładnym środkiem i zachowaniem bazowej częstotliwości podczas Glide.
+- Dodano nagrywanie odstrojenia do loopera, zapis projektów i renderowanie WAV.
+- Profile AKM322 i NI zawierają kółko; NI ma wariant bezwzględny i względne,
+  wykrywane są porty muzyczne znanych kontrolerów.
+- Przypisania można czasowo wyłączać, usuwać i przywracać; konfiguracja zachowuje
+  te decyzje, a wyłączenie kółka przywraca normalny strój także podczas ruchu.
+- Generacje kolejki zapobiegają wykonaniu zdarzeń starego przypisania po jego zmianie.
+- Schemat projektu 2 zachowuje wyłączone mapowania; odczytywany jest też schemat 1.
+
+## Struktura Projektu (v16.2)
 - `main.py`: Główne okno, obsługa klawiatury, menu, logika UI.
 - `synth.py`: Silnik audio (Oscylatory, Warstwy, Efekty DSP, Miksowanie).
 - `sequencer.py`: Logika sekwencera perkusyjnego i nagrywania pętli.

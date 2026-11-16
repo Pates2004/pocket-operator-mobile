@@ -1,4 +1,4 @@
-# Pocket Operator mobile v16.1
+# Pocket Operator mobile v16.2
 
 [Polska dokumentacja](README.md)
 
@@ -9,6 +9,9 @@ It preserves the musical features consolidated in v15 from six historical lines.
 
 Version 16.1 adds consistent spoken change feedback for MIDI and computer
 keyboard controls, with independent persistent switches for both sources.
+Version 16.2 adds musical ±2-semitone Pitch Bend, bend recording and individually
+disableable assignments. AKM322 and NI presets are bundled in GitHub source
+and portable releases.
 
 ## Portable startup
 
@@ -216,6 +219,26 @@ also enter type, channel and number manually. Channels are 1–16 in the interfa
 Delete selected mapping removes that entry only. Changes are saved immediately.
 The read-only monitor shows the most recent incoming control message.
 
+To disable an entry temporarily, select it, clear **Assignment enabled** and
+activate **Save mapping**. Its disabled state remains visible and persists after
+restart. Re-enable and save to restore it. Disabled entries consume their MIDI
+source, including note pads; deleting an entry instead restores ordinary MIDI
+handling for its note/pedal. Empty lists and deleted assignments are not
+automatically recreated. Explicitly loading a controller profile replaces the
+list with that profile's enabled defaults.
+
+### Musical Pitch Bend
+
+Factory profiles map the pitch wheel/strip to ±2 semitones with an exact neutral
+center. It affects existing and future MIDI notes on the matching channel,
+including Glide, without bending computer keyboard notes or other MIDI channels.
+Bend movements are recorded in the looper, saved in projects and rendered to WAV.
+Stop, PANIC, port close and editing/disabling a mapping restore neutral pitch;
+disabling the wheel mid-bend cannot leave notes detuned.
+
+You can disable, delete or remap it. The musical Pitch Bend action requires
+Absolute mode; NI relative-knob presets still use Absolute mode for the wheel.
+
 Supported sources: CC, Note On/Off, Program Change, Pitch Bend, Channel Pressure,
 Start/Continue/Stop and Universal Realtime MIDI Machine Control SysEx. Mapped notes
 become buttons; other notes continue playing. CC64 sustain and CC120/123 retain
@@ -247,6 +270,7 @@ The default AKM322 profile follows a real physical-control capture:
 | Control | Message | Action |
 | --- | --- | --- |
 | DATA encoder | CC10, observed absolute | Instrument A |
+| Left spring-centered wheel | Pitch Bend | MIDI note pitch ±2 semitones |
 | Knob 1 | CC21 | Instrument B |
 | Knob 2 | CC22 | Layers A |
 | Knob 3 | CC23 | Effects A |
@@ -267,6 +291,10 @@ inside the keyboard and send nothing to the PC; software cannot intercept those.
 The [official AKM322 manual](https://www.midiplus.com.tw/cn/MIDIPLUS-Download-detail/0/Manual_Of_AKM322_EN/)
 describes editing the encoder, knobs and transport buttons.
 
+An unmodified v16.0/v16.1 AKM322 preset is upgraded with the missing wheel.
+Custom lists are preserved: use Learn to add the wheel or explicitly reload the
+profile if needed. Once using v16.2, disabled/deleted bindings are not restored.
+
 ### Native Instruments
 
 Use ordinary MIDI mode. The manufacturer's combinations are SHIFT+MIDI/PLUG-IN
@@ -280,6 +308,15 @@ CC14–21 in NI's editor or learn the numbers in your current template. The rela
 encodings follow the [NI MIDI control documentation](https://docs.native-instruments.com/online-guides/komplete-kontrol-manual/en/automation-and-midi-control.html).
 NKS, display/LED feedback and proprietary DAW/HID integration are not implemented.
 NI hardware was not connected during validation; decoding and routing have tests.
+
+New configurations recognize KOMPLETE/KONTROL/Native Instruments port names and
+choose **NI CC14–21 Absolute**, preferring a musical input over a DAW endpoint.
+The eight knobs control instrument A/B, layers A/B, effects A/B, volume and BPM;
+CC1 controls FX B, Pitch Bend controls note pitch and realtime/MMC controls
+transport. The [official M32 manual](https://docs.native-instruments.com/pdf-guides/komplete_kontrol/KOMPLETE_KONTROL_M32_Manual_English_200127.pdf)
+shows the CC14–21 layout. These are ready-to-use starting presets rather than
+recognition of arbitrary edited NI templates. Saved custom or deliberately empty
+mappings take priority over automatic profile detection.
 
 ## Preferences, projects and WAV
 
@@ -297,7 +334,9 @@ recreating them. The next start requires setup again.
 
 Ctrl+O opens a project; Ctrl+Shift+S saves readable `.po15` JSON. The extension
 is retained for v15 compatibility; new mapping fields are optional in older
-projects. Identifier: `pocket-operator-mobile-project`, schema 1. A project stores
+projects. Identifier: `pocket-operator-mobile-project`. V16.2 writes schema 2 and
+also reads schema 1. The new schema prevents older releases from treating
+disabled mappings as active. A project stores
 musical state and mappings; language/theme remain application preferences.
 Opening a project preserves current hardware selection. Invalid structures or
 unsupported schemas are rejected before changing the session.

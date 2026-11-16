@@ -67,7 +67,7 @@ class Sequencer:
     def record_event(self, event_type, note, waveform=None):
         if not self.recording:
             return
-        if event_type not in {"note_on", "note_off"}:
+        if event_type not in {"note_on", "note_off", "pitch_bend"}:
             raise ValueError(f"Nieobsługiwany typ zdarzenia: {event_type}")
 
         now = time.monotonic() * 1_000
@@ -148,6 +148,8 @@ class Sequencer:
             thread.join(timeout=0.5)
         if hasattr(self.synth, "all_notes_off"):
             self.synth.all_notes_off()
+        if hasattr(self.synth, "reset_pitch_bend"):
+            self.synth.reset_pitch_bend()
 
     def set_recording(self, enabled):
         enabled = bool(enabled)
@@ -205,17 +207,30 @@ class Sequencer:
                 raise TypeError("Zdarzenie melodii musi być słownikiem")
             event_type = raw_event.get("type")
             note = raw_event.get("note")
-            if event_type not in {"note_on", "note_off"} or not isinstance(note, dict):
+            if event_type not in {
+                "note_on",
+                "note_off",
+                "pitch_bend",
+            } or not isinstance(note, dict):
                 raise TypeError("Niepoprawne zdarzenie melodii")
             note = copy.deepcopy(note)
             if isinstance(note.get("key"), list):
                 note["key"] = tuple(note["key"])
-            if "key" not in note:
-                raise ValueError("Zdarzenie melodii nie zawiera klucza nuty")
-            try:
-                hash(note["key"])
-            except TypeError as error:
-                raise TypeError("Klucz nuty musi być hashowalny") from error
+            if event_type == "pitch_bend":
+                channel = note.get("channel")
+                semitones = float(note.get("semitones", 0.0))
+                if type(channel) is not int or not 0 <= channel <= 15:
+                    raise ValueError("MIDI channel must be 0..15")
+                if not math.isfinite(semitones) or not -48 <= semitones <= 48:
+                    raise ValueError("Invalid recorded Pitch Bend")
+                note = {"channel": channel, "semitones": semitones}
+            else:
+                if "key" not in note:
+                    raise ValueError("Zdarzenie melodii nie zawiera klucza nuty")
+                try:
+                    hash(note["key"])
+                except TypeError as error:
+                    raise TypeError("Klucz nuty musi być hashowalny") from error
 
             if event_type == "note_on":
                 frequency = float(note.get("freq", 0.0))
@@ -271,6 +286,8 @@ class Sequencer:
             )
         elif event.get("type") == "note_off":
             self.synth.note_off(note["key"])
+        elif event.get("type") == "pitch_bend":
+            self.synth.set_pitch_bend(note["semitones"], note["channel"])
 
     def _loop(self):
         previous_step_token = None

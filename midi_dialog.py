@@ -65,6 +65,10 @@ class MidiMappingDialog(wx.Dialog):
             wx.SpinCtrlDouble(self, min=0.01, max=100, initial=1, inc=0.5),
         )
         self.invert = row("Reverse direction", wx.CheckBox(self, label=tr("Enabled")))
+        self.enabled = row(
+            "Assignment enabled", wx.CheckBox(self, label=tr("Assignment enabled"))
+        )
+        self.enabled.SetValue(True)
         layout.Add(grid, 0, wx.EXPAND | wx.ALL, 10)
         self.monitor = wx.TextCtrl(self, style=wx.TE_READONLY)
         self.monitor.SetName(tr("Last MIDI message"))
@@ -98,6 +102,7 @@ class MidiMappingDialog(wx.Dialog):
                 f"{item['type']} {item['number']} / {tr('Channel')} "
                 f"{item['channel'] + 1 if item['channel'] is not None else '*'} → "
                 f"{tr(item['action'])} ({tr(item['mode'])})"
+                f" — {tr('Enabled') if item['enabled'] else tr('Disabled')}"
                 for item in self.mapper.export_state()
             ]
         )
@@ -116,6 +121,7 @@ class MidiMappingDialog(wx.Dialog):
         self.mode.SetSelection(midi_mapping.MODES.index(item["mode"]))
         self.step.SetValue(item["step"] * 100)
         self.invert.SetValue(item["invert"])
+        self.enabled.SetValue(item["enabled"])
 
     def on_message(self, source, value):
         channel = source[1] + 1 if source[1] is not None else "*"
@@ -140,6 +146,7 @@ class MidiMappingDialog(wx.Dialog):
         self.kind.SetSelection(self.types.index(kind))
         self.channel.SetSelection(channel + 1 if channel is not None else 0)
         self.number.SetValue(number)
+        self.enabled.SetValue(True)
         self.monitor.ChangeValue(
             tr("Control learned. Select its action and mode, then save.")
         )
@@ -157,10 +164,11 @@ class MidiMappingDialog(wx.Dialog):
             "mode": midi_mapping.MODES[self.mode.GetSelection()],
             "step": self.step.GetValue() / 100,
             "invert": self.invert.GetValue(),
+            "enabled": self.enabled.GetValue(),
         }
         try:
             self.mapper.add(item)
-            self.owner.save_settings()
+            self.owner.save_midi_mappings()
             self.refresh_entries()
             self.owner.speaker.say(tr("MIDI mapping saved"))
         except (ValueError, OSError) as error:
@@ -174,20 +182,21 @@ class MidiMappingDialog(wx.Dialog):
             entries = self.mapper.export_state()
             entries.pop(index)
             self.mapper.import_state(entries)
-            self.owner.save_settings()
+            self.owner.save_midi_mappings()
             self.refresh_entries()
 
     def on_profile(self, event):
-        profiles = ("akm322", "generic", "ni_relative", "ni_offset")
+        profiles = ("akm322", "ni_absolute", "ni_relative", "ni_offset", "generic")
         with wx.SingleChoiceDialog(
             self,
             tr("Select a controller template. This replaces the mapping list."),
             tr("Controller profile"),
             [
                 "MIDIPLUS AKM322",
+                tr("NI CC14–21 Absolute"),
+                tr("NI CC14–21 Relative"),
+                tr("NI CC14–21 Relative Offset"),
                 tr("CC14–21 absolute"),
-                "NI CC14–21 Relative",
-                "NI CC14–21 Relative Offset",
             ],
         ) as dialog:
             if dialog.ShowModal() != wx.ID_OK:
@@ -195,7 +204,7 @@ class MidiMappingDialog(wx.Dialog):
             self.mapper.import_state(
                 midi_mapping.profile(profiles[dialog.GetSelection()])
             )
-        self.owner.save_settings()
+        self.owner.save_midi_mappings()
         self.refresh_entries()
 
     def detach(self):
