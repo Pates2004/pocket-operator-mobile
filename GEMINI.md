@@ -92,7 +92,17 @@ Dokumentacja rozwoju aplikacji syntezatora 8-bitowego, stworzonej w Pythonie (wx
 - Poprawiono wybór oktawy -1 i nieobsługiwane przez wx nazwy akceleratorów.
 - Dodano portable Windows i przygotowanie bibliotek przez launcher źródłowy.
 
-## Struktura Projektu (v16.0)
+## Faza 13: Spójna informacja głosowa (v16.1)
+
+- Dodano wspólny tor informacji o zmianach dla MIDI i klawiatury komputerowej.
+- Dwa niezależne przełączniki w menu, skróty F9/F10 z Ctrl+Alt+Shift i akcje MIDI
+  zapisują wybór obu źródeł, jednego źródła albo wyciszenia w sekcji FEEDBACK.
+- Szybkie ruchy kontrolerów są łączone z zachowaniem odczytu wartości końcowej.
+- Nieprzypisane kontrolery, identyczne wartości i osiągnięte granice milczą.
+- Testy potwierdzają wpływ wszystkich gałek AKM322 na przypisane parametry,
+  w tym dźwięk release, aktywnej warstwy i aktywnego efektu.
+
+## Struktura Projektu (v16.1)
 - `main.py`: Główne okno, obsługa klawiatury, menu, logika UI.
 - `synth.py`: Silnik audio (Oscylatory, Warstwy, Efekty DSP, Miksowanie).
 - `sequencer.py`: Logika sekwencera perkusyjnego i nagrywania pętli.

@@ -2,6 +2,20 @@
   "language": "en",
   "name": "English",
   "strings": {
+    "Speak MIDI changes": "Speak MIDI changes",
+    "Speak computer keyboard changes": "Speak computer keyboard changes",
+    "Computer keyboard": "computer keyboard",
+    "Disabled": "Disabled",
+    "{source} speech: {state}": "{source} speech: {state}",
+    "{name}: {value} percent": "{name}: {value} percent",
+    "{name}: {state}": "{name}: {state}",
+    "Speech: keyboard and MIDI": "Speech: computer keyboard and MIDI",
+    "Speech: MIDI only": "Speech: MIDI only",
+    "Speech: computer keyboard only": "Speech: computer keyboard only",
+    "Change speech disabled": "Change speech disabled",
+    "feedback_midi": "Toggle MIDI change speech",
+    "feedback_keyboard": "Toggle computer keyboard change speech",
+    "feedback_cycle": "Cycle change speech sources",
     "BPM i liczba pętli muszą być dodatnie": "BPM and loop count must be positive",
     "Częstotliwość nuty musi być dodatnia i skończona": "Note frequency must be positive and finite",
     "Wartości syntezatora muszą być słownikiem": "Synthesizer values must be a dictionary",
@@ -343,6 +357,6 @@
     "drum:cowbell": "Drum: cowbell",
     "drum:crash": "Drum: crash",
     "drum:laser": "Drum: laser",
-    "help": "POCKET OPERATOR MOBILE v16.0 — SHORTCUTS\n\nPLAYBACK\nSpace: start/stop; Ctrl+R: record; Ctrl+E: drum editor.\nZ S X D C V G B H N J M , L . ; / and Q 2 W 3 E 4 R 5 T 6 Y 7 U: notes.\nF5–F12: Kick, Snare, HiHat, Tom, Clap, Cowbell, Crash, Laser.\nCtrl+F1–F5: Square, Saw, Triangle, Noise, DrumKit.\n\nKNOBS\nPgUp/PgDn: instrument A; Home/End: instrument B.\nCtrl+Alt+PgUp/PgDn/Home/End: layer knobs A/B.\nAlt+PgUp/PgDn/Home/End: effect knobs A/B.\nCtrl+PgUp/PgDn/Home/End: instrument extremes.\nDelete/Backspace: reset instrument A/B.\nCtrl+Alt+Delete/Backspace: reset layers; Alt+Delete/Backspace: reset FX.\n\nLAYERS AND EFFECTS\nAlt+` and Alt+1..= plus Alt+\\: toggle layer.\nCtrl+Shift+` and Ctrl+Shift+1..=: Punch-In while held.\nCtrl+Shift+Backspace: disable layers; Alt+Shift+Backspace: disable FX.\nCtrl+Num /,1..0,*,-,.: layer target; Ctrl+Shift+Num: FX target.\nCtrl+NumDel / Ctrl+Shift+NumDel: all layer/FX targets.\n\nOTHER\nAlt+Up/Down/Left: volume up/down/reset.\nCtrl+Up/Down/Left: octave up/down/reset.\nCtrl+S/G/H/B: Sustain/Glide/Chords/Block repeats.\nCtrl+Shift+P: global drums; Ctrl+Shift+Z X C V B N M ,: drums.\nCtrl+Shift+Escape: PANIC; Ctrl+Shift+Delete: factory reset.\nCtrl+O: open project; Ctrl+Shift+S: save; Ctrl+Shift+E: WAV.\nMIDI menu: mappings, MIDI Learn, controller profiles.\nSettings menu: language, theme, usage hints."
+    "help": "POCKET OPERATOR MOBILE v16.1 — SHORTCUTS\n\nPLAYBACK\nSpace: start/stop; Ctrl+R: record; Ctrl+E: drum editor.\nZ S X D C V G B H N J M , L . ; / and Q 2 W 3 E 4 R 5 T 6 Y 7 U: notes.\nF5–F12: Kick, Snare, HiHat, Tom, Clap, Cowbell, Crash, Laser.\nCtrl+F1–F5: Square, Saw, Triangle, Noise, DrumKit.\n\nKNOBS\nPgUp/PgDn: instrument A; Home/End: instrument B.\nCtrl+Alt+PgUp/PgDn/Home/End: layer knobs A/B.\nAlt+PgUp/PgDn/Home/End: effect knobs A/B.\nCtrl+PgUp/PgDn/Home/End: instrument extremes.\nDelete/Backspace: reset instrument A/B.\nCtrl+Alt+Delete/Backspace: reset layers; Alt+Delete/Backspace: reset FX.\n\nLAYERS AND EFFECTS\nAlt+` and Alt+1..= plus Alt+\\: toggle layer.\nCtrl+Shift+` and Ctrl+Shift+1..=: Punch-In while held.\nCtrl+Shift+Backspace: disable layers; Alt+Shift+Backspace: disable FX.\nCtrl+Num /,1..0,*,-,.: layer target; Ctrl+Shift+Num: FX target.\nCtrl+NumDel / Ctrl+Shift+NumDel: all layer/FX targets.\n\nOTHER\nAlt+Up/Down/Left: volume up/down/reset.\nCtrl+Up/Down/Left: octave up/down/reset.\nCtrl+S/G/H/B: Sustain/Glide/Chords/Block repeats.\nCtrl+Shift+P: global drums; Ctrl+Shift+Z X C V B N M ,: drums.\nCtrl+Shift+Escape: PANIC; Ctrl+Shift+Delete: factory reset.\nCtrl+O: open project; Ctrl+Shift+S: save; Ctrl+Shift+E: WAV.\nMIDI menu: mappings, MIDI Learn, controller profiles.\nSettings menu: language, theme, usage hints.\nCtrl+Alt+Shift+F9: MIDI change speech.\nCtrl+Alt+Shift+F10: computer keyboard change speech."
   }
 }

@@ -13,6 +13,7 @@ import sequencer
 import synth
 import ui_support
 from app_paths import APP_DIR
+from feedback import ChangeFeedback
 from localization import tr
 from midi_dialog import MidiMappingDialog
 
@@ -26,7 +27,7 @@ except ImportError:
 
 
 APP_NAME = "Pocket Operator mobile"
-APP_VERSION = "16.0"
+APP_VERSION = "16.1"
 PROJECT_FORMAT = "pocket-operator-mobile-project"
 BASE_DIR = APP_DIR
 CONFIG_PATH = BASE_DIR / "po.ini"
@@ -135,6 +136,7 @@ class DrumEditorDialog(wx.Dialog):
         super().__init__(parent, title=tr("Edytor perkusji"), size=(420, 180))
         self.seq = sequencer_instance
         self.speaker = parent.speaker
+        self.feedback = parent.feedback
         self.instruments = list(sequencer.DRUM_INSTRUMENTS)
         self.instrument_index = 0
         self.step = 0
@@ -156,7 +158,7 @@ class DrumEditorDialog(wx.Dialog):
         message = f"{instrument}, krok {self.step + 1}, {state}"
         self.label.SetLabel(tr(message))
         if speak:
-            self.speaker.say(message)
+            self.feedback.announce(message)
 
     def on_key(self, event):
         key = event.GetKeyCode()
@@ -176,7 +178,7 @@ class DrumEditorDialog(wx.Dialog):
             active = self.seq.toggle_drum(
                 self.instruments[self.instrument_index], self.step
             )
-            self.speaker.say("Włączony" if active else "Wyłączony")
+            self.feedback.announce("Włączony" if active else "Wyłączony")
             self.update_view()
         elif key == wx.WXK_ESCAPE:
             self.Close()
@@ -230,6 +232,7 @@ class MainFrame(wx.Frame):
             size=(680, 320),
         )
         self.speaker = Speaker()
+        self.feedback = ChangeFeedback(self.speaker.say, wx.CallLater)
         self._closing = False
         self._skip_save = False
         self.audio_device = None
@@ -445,6 +448,27 @@ class MainFrame(wx.Frame):
         control_menu.AppendSubMenu(effect_control_menu, "Cel gałek efektów")
 
         settings_menu = wx.Menu()
+        self.feedback_midi_item = settings_menu.Append(
+            wx.ID_ANY, "Speak MIDI changes\tCtrl+Alt+Shift+F9", kind=wx.ITEM_CHECK
+        )
+        self.feedback_keyboard_item = settings_menu.Append(
+            wx.ID_ANY,
+            "Speak computer keyboard changes\tCtrl+Alt+Shift+F10",
+            kind=wx.ITEM_CHECK,
+        )
+        self.feedback_midi_item.Check(self.feedback.enabled["midi"])
+        self.feedback_keyboard_item.Check(self.feedback.enabled["keyboard"])
+        self.Bind(
+            wx.EVT_MENU,
+            lambda event: self.toggle_feedback("midi"),
+            self.feedback_midi_item,
+        )
+        self.Bind(
+            wx.EVT_MENU,
+            lambda event: self.toggle_feedback("keyboard"),
+            self.feedback_keyboard_item,
+        )
+        settings_menu.AppendSeparator()
         appearance_item = settings_menu.Append(wx.ID_ANY, "Language and theme...")
         self.Bind(wx.EVT_MENU, self.change_appearance, appearance_item)
         self.hints_item = settings_menu.Append(
@@ -609,6 +633,7 @@ class MainFrame(wx.Frame):
         selection = ui_support.ensure_setup(CONFIG_PATH, self, force=True)
         if selection is None:
             return
+        self.feedback.cancel_pending()
         self.SetMenuBar(None)
         self.create_menu()
         for code, item in self.layer_items.items():
@@ -626,27 +651,56 @@ class MainFrame(wx.Frame):
         with MidiMappingDialog(self) as dialog:
             dialog.ShowModal()
 
+    def toggle_feedback(self, source):
+        enabled = not self.feedback.enabled[source]
+        self.feedback.set_enabled(source, enabled)
+        item = (
+            self.feedback_midi_item if source == "midi" else self.feedback_keyboard_item
+        )
+        item.Check(enabled)
+        label = tr("MIDI") if source == "midi" else tr("Computer keyboard")
+        state = tr("Enabled") if enabled else tr("Disabled")
+        self.speaker.say(tr("{source} speech: {state}", source=label, state=state))
+        self.save_settings()
+
+    def cycle_feedback(self):
+        modes = ((True, True), (False, True), (True, False), (False, False))
+        current = self.feedback.enabled["keyboard"], self.feedback.enabled["midi"]
+        keyboard, midi = modes[(modes.index(current) + 1) % len(modes)]
+        for source, enabled in (("keyboard", keyboard), ("midi", midi)):
+            self.feedback.set_enabled(source, enabled)
+        self.feedback_keyboard_item.Check(keyboard)
+        self.feedback_midi_item.Check(midi)
+        labels = {
+            (True, True): "Speech: keyboard and MIDI",
+            (False, True): "Speech: MIDI only",
+            (True, False): "Speech: computer keyboard only",
+            (False, False): "Change speech disabled",
+        }
+        self.speaker.say(tr(labels[(keyboard, midi)]))
+        self.save_settings()
+
     def handle_midi_action(self, action, mode, value):
         if self._closing:
             return
+        with self.feedback.using_source(
+            "midi", continuous=mode in {"absolute", "relative"}
+        ):
+            self._apply_midi_action(action, mode, value)
+
+    def _apply_midi_action(self, action, mode, value):
         relative = mode == "relative"
         if action in {"main_a", "main_b", "layer_a", "layer_b", "fx_a", "fx_b"}:
             target, parameter = action.rsplit("_", 1)
-            if target == "main":
-                current = self.synth.values[action]
-            elif target == "layer":
-                current = self.synth.get_layer_val(parameter)
+            if relative:
+                self.change_knob(target, parameter, delta=value)
             else:
-                current = self.synth.get_fx_val(parameter)
-            updated = max(0, min(1, current + value if relative else value))
-            if target == "main":
-                getattr(self.synth, f"set_knob_{parameter}")(updated)
-            elif target == "layer":
-                self.synth.set_layer_knob(parameter, updated)
-            else:
-                self.synth.set_fx_knob(parameter, updated)
+                self.change_knob(target, parameter, absolute=value)
         elif action == "volume":
+            previous = self.synth.vol
             self.synth.set_vol(self.synth.vol + value if relative else value)
+            if self.synth.vol != previous:
+                self.feedback.announce(f"Głośność {int(self.synth.vol * 100)} procent")
         elif action == "bpm":
             bpm = self.bpm + round(value * 280) if relative else 20 + round(value * 280)
             self.set_bpm(max(20, min(300, bpm)))
@@ -658,9 +712,14 @@ class MainFrame(wx.Frame):
                 current = self.synth.values[key]
                 updated = max(0, min(1, current + value if relative else value))
                 self.synth.restore_values({key: updated})
+                if current != self.synth.values[key]:
+                    self.announce_knob(
+                        f"{group}:{code}:{parts[2]}", self.synth.values[key]
+                    )
             else:
                 active = self.synth.layers if group == "layer" else self.synth.fx
                 items = self.layer_items if group == "layer" else self.effect_items
+                was_active = code in active
                 if mode == "gate":
                     if value:
                         self.midi_gates.setdefault(action, code in active)
@@ -673,19 +732,40 @@ class MainFrame(wx.Frame):
                     active.add(code)
                 items[code].Check(code in active)
                 self._update_control_ui()
+                if was_active != (code in active):
+                    self.feedback.announce(
+                        tr(
+                            "{name}: {state}",
+                            name=tr(action),
+                            state=tr("Enabled") if code in active else tr("Disabled"),
+                        )
+                    )
         elif action.startswith("drum:"):
             self.synth.trigger_drum(action.split(":", 1)[1])
+            self.feedback.announce(tr(action))
         elif action == "play":
+            was_running = self.seq.running
             self.seq.play()
+            if not was_running:
+                self.feedback.announce("Start")
         elif action == "stop":
+            was_running = self.seq.running
             self._close_recorded_notes()
             self.seq.stop()
+            if was_running:
+                self.feedback.announce("Stop")
         elif action == "record":
             self.toggle_recording()
         elif action == "play_toggle":
             self.toggle_playback()
         elif action == "panic":
             self.panic()
+        elif action == "feedback_midi":
+            self.toggle_feedback("midi")
+        elif action == "feedback_keyboard":
+            self.toggle_feedback("keyboard")
+        elif action == "feedback_cycle":
+            self.cycle_feedback()
         elif action in {"octave_up", "octave_down"}:
             self.set_octave(self.octave + (1 if action == "octave_up" else -1))
         elif action == "wave_next":
@@ -723,26 +803,34 @@ class MainFrame(wx.Frame):
     def set_waveform(self, waveform):
         if waveform not in self.wave_items:
             return
+        previous = self.waveform
         self.waveform = waveform
         self.wave_items[waveform].Check(True)
-        self.speaker.say(f"Instrument {waveform}")
+        if previous != waveform:
+            self.feedback.announce(f"Instrument {waveform}")
         self.update_status()
 
     def set_octave(self, octave):
+        previous = self.octave
         self.octave = max(-3, min(3, int(octave)))
-        self.speaker.say(f"Oktawa {self.octave}")
+        if previous != self.octave:
+            self.feedback.announce(f"Oktawa {self.octave}")
         self.update_status()
 
     def set_volume(self, delta=0.0, reset=False):
+        previous = self.synth.vol
         value = 0.2 if reset else self.synth.vol + delta
         self.synth.set_vol(value)
-        self.speaker.say(f"Głośność {int(self.synth.vol * 100)} procent")
+        if previous != self.synth.vol:
+            self.feedback.announce(f"Głośność {int(self.synth.vol * 100)} procent")
         self.update_status()
 
     def set_bpm(self, bpm):
+        previous = self.bpm
         self.seq.set_bpm(bpm)
         self.bpm = int(bpm)
-        self.speaker.say(f"Tempo {self.bpm}")
+        if previous != self.bpm:
+            self.feedback.announce(f"Tempo {self.bpm}")
         self.update_status()
 
     def update_status(self):
@@ -762,22 +850,22 @@ class MainFrame(wx.Frame):
         if layer in self.synth.layers:
             self.synth.layers.remove(layer)
             self.layer_items[layer].Check(False)
-            self.speaker.say(f"Wyłączono warstwę {layer}")
+            self.feedback.announce(f"Wyłączono warstwę {layer}")
         else:
             self.synth.layers.add(layer)
             self.layer_items[layer].Check(True)
-            self.speaker.say(f"Włączono warstwę {layer}")
+            self.feedback.announce(f"Włączono warstwę {layer}")
         self._update_control_ui()
 
     def toggle_effect(self, effect):
         if effect in self.synth.fx:
             self.synth.fx.remove(effect)
             self.effect_items[effect].Check(False)
-            self.speaker.say(f"Wyłączono efekt {effect}")
+            self.feedback.announce(f"Wyłączono efekt {effect}")
         else:
             self.synth.fx.add(effect)
             self.effect_items[effect].Check(True)
-            self.speaker.say(f"Włączono efekt {effect}")
+            self.feedback.announce(f"Włączono efekt {effect}")
         self._update_control_ui()
 
     def clear_layers(self, event=None):
@@ -786,7 +874,7 @@ class MainFrame(wx.Frame):
         for item in self.layer_items.values():
             item.Check(False)
         self._update_control_ui()
-        self.speaker.say("Wyłączono wszystkie warstwy")
+        self.feedback.announce("Wyłączono wszystkie warstwy")
 
     def clear_effects(self, event=None):
         self.synth.fx.clear()
@@ -794,11 +882,11 @@ class MainFrame(wx.Frame):
         for item in self.effect_items.values():
             item.Check(False)
         self._update_control_ui()
-        self.speaker.say("Wyłączono wszystkie efekty")
+        self.feedback.announce("Wyłączono wszystkie efekty")
 
     def toggle_layer_target(self, layer):
         if layer not in self.synth.layers:
-            self.speaker.say(f"Warstwa {layer} nie jest aktywna")
+            self.feedback.announce(f"Warstwa {layer} nie jest aktywna")
             return
         if layer in self.synth.targets_layer:
             self.synth.targets_layer.remove(layer)
@@ -807,11 +895,11 @@ class MainFrame(wx.Frame):
             self.synth.targets_layer.add(layer)
             selected = True
         self.layer_control_items[layer].Check(selected)
-        self.speaker.say(f"{'Zaznaczono' if selected else 'Odznaczono'} {layer}")
+        self.feedback.announce(f"{'Zaznaczono' if selected else 'Odznaczono'} {layer}")
 
     def toggle_effect_target(self, effect):
         if effect not in self.synth.fx:
-            self.speaker.say(f"Efekt {effect} nie jest aktywny")
+            self.feedback.announce(f"Efekt {effect} nie jest aktywny")
             return
         if effect in self.synth.targets_fx:
             self.synth.targets_fx.remove(effect)
@@ -820,12 +908,12 @@ class MainFrame(wx.Frame):
             self.synth.targets_fx.add(effect)
             selected = True
         self.effect_control_items[effect].Check(selected)
-        self.speaker.say(f"{'Zaznaczono' if selected else 'Odznaczono'} {effect}")
+        self.feedback.announce(f"{'Zaznaczono' if selected else 'Odznaczono'} {effect}")
 
     def toggle_all_layer_targets(self, event=None):
         available = set(self.synth.layers)
         if not available:
-            self.speaker.say("Brak aktywnych warstw")
+            self.feedback.announce("Brak aktywnych warstw")
             return
         if self.synth.targets_layer == available:
             self.synth.targets_layer.clear()
@@ -834,12 +922,12 @@ class MainFrame(wx.Frame):
             self.synth.targets_layer.update(available)
             message = "Zaznaczono wszystkie warstwy"
         self._update_control_ui()
-        self.speaker.say(message)
+        self.feedback.announce(message)
 
     def toggle_all_effect_targets(self, event=None):
         available = set(self.synth.fx)
         if not available:
-            self.speaker.say("Brak aktywnych efektów")
+            self.feedback.announce("Brak aktywnych efektów")
             return
         if self.synth.targets_fx == available:
             self.synth.targets_fx.clear()
@@ -848,7 +936,7 @@ class MainFrame(wx.Frame):
             self.synth.targets_fx.update(available)
             message = "Zaznaczono wszystkie efekty"
         self._update_control_ui()
-        self.speaker.say(message)
+        self.feedback.announce(message)
 
     def _update_control_ui(self):
         self.synth.targets_layer.intersection_update(self.synth.layers)
@@ -865,6 +953,7 @@ class MainFrame(wx.Frame):
             item.Check(active and code in self.synth.targets_fx)
 
     def change_knob(self, target, parameter, delta=None, absolute=None):
+        previous = dict(self.synth.values)
         if target == "main":
             current = self.synth.values[f"main_{parameter}"]
         elif target == "layer":
@@ -891,8 +980,13 @@ class MainFrame(wx.Frame):
         else:
             value = self.synth.get_fx_val(parameter)
 
-        self.speaker.say(f"{target}, gałka {parameter.upper()}, {int(value * 100)}")
+        if previous != self.synth.values:
+            self.announce_knob(f"{target}_{parameter}", value)
         self.update_status()
+
+    def announce_knob(self, action, value):
+        text = tr("{name}: {value} percent", name=tr(action), value=int(value * 100))
+        self.feedback.announce(text)
 
     def toggle_playback(self, event=None):
         if self.seq.running:
@@ -902,7 +996,7 @@ class MainFrame(wx.Frame):
         else:
             self.seq.play()
             message = "Start"
-        self.speaker.say(message)
+        self.feedback.announce(message)
         self.update_status()
 
     def toggle_recording(self, event=None):
@@ -910,7 +1004,9 @@ class MainFrame(wx.Frame):
         if not enabled:
             self._close_recorded_notes()
         self.seq.set_recording(enabled)
-        self.speaker.say("Nagrywanie włączone" if enabled else "Nagrywanie wyłączone")
+        self.feedback.announce(
+            "Nagrywanie włączone" if enabled else "Nagrywanie wyłączone"
+        )
         self.update_status()
 
     def trigger_note(self, physical_key, semitone, velocity=1.0):
@@ -980,7 +1076,7 @@ class MainFrame(wx.Frame):
             self.synth.fx.add(effect)
             self.effect_items[effect].Check(True)
             self._update_control_ui()
-        self.speaker.say(f"Punch-In {effect}")
+        self.feedback.announce(f"Punch-In {effect}")
 
     def end_punch_in(self, key):
         punch = self.punch_in_keys.pop(key, None)
@@ -1004,37 +1100,43 @@ class MainFrame(wx.Frame):
 
     def on_sustain(self, event):
         self.synth.sus = self._checked(event, self.sustain_item)
-        self.speaker.say(f"Sustain {'włączony' if self.synth.sus else 'wyłączony'}")
+        self.feedback.announce(
+            f"Sustain {'włączony' if self.synth.sus else 'wyłączony'}"
+        )
 
     def on_glide(self, event):
         self.synth.glide = self._checked(event, self.glide_item)
-        self.speaker.say(f"Glide {'włączony' if self.synth.glide else 'wyłączony'}")
+        self.feedback.announce(
+            f"Glide {'włączony' if self.synth.glide else 'wyłączony'}"
+        )
 
     def on_chord(self, event):
         self.chord_mode = self._checked(event, self.chord_item)
-        self.speaker.say(f"Akordy {'włączone' if self.chord_mode else 'wyłączone'}")
+        self.feedback.announce(
+            f"Akordy {'włączone' if self.chord_mode else 'wyłączone'}"
+        )
 
     def on_global_drums(self, event):
         self.global_drums = self._checked(event, self.global_drums_item)
-        self.speaker.say(
+        self.feedback.announce(
             f"Globalne bębny {'włączone' if self.global_drums else 'wyłączone'}"
         )
 
     def on_release(self, event):
         self.synth.fix_rel = self._checked(event, self.release_item)
-        self.speaker.say(
+        self.feedback.announce(
             f"Wyrównany release {'włączony' if self.synth.fix_rel else 'wyłączony'}"
         )
 
     def on_pc_keyboard(self, event):
         self.pc_keyboard = self._checked(event, self.pc_keyboard_item)
-        self.speaker.say(
+        self.feedback.announce(
             f"Klawiatura PC {'włączona' if self.pc_keyboard else 'wyłączona'}"
         )
 
     def on_block_repeat(self, event):
         self.block_repeat = self._checked(event, self.block_repeat_item)
-        self.speaker.say(
+        self.feedback.announce(
             f"Blokada powtórzeń {'włączona' if self.block_repeat else 'wyłączona'}"
         )
 
@@ -1059,6 +1161,10 @@ class MainFrame(wx.Frame):
         control = event.ControlDown()
         shift = event.ShiftDown()
         alt = event.AltDown()
+
+        if control and shift and alt and key in {wx.WXK_F9, wx.WXK_F10}:
+            self.toggle_feedback("midi" if key == wx.WXK_F9 else "keyboard")
+            return
 
         if control and shift and key == wx.WXK_ESCAPE:
             self.panic()
@@ -1699,6 +1805,12 @@ class MainFrame(wx.Frame):
         try:
             config.read(CONFIG_PATH, encoding="utf-8")
             settings = config["SETTINGS"]
+            for source in ("keyboard", "midi"):
+                self.feedback.set_enabled(
+                    source, config.getboolean("FEEDBACK", source, fallback=True)
+                )
+            self.feedback_keyboard_item.Check(self.feedback.enabled["keyboard"])
+            self.feedback_midi_item.Check(self.feedback.enabled["midi"])
             waveform = settings.get("wave", "square")
             if waveform in self.wave_items:
                 self.waveform = waveform
@@ -1818,6 +1930,9 @@ class MainFrame(wx.Frame):
         config["MIDI_MAPPINGS"] = {
             "bindings": json.dumps(self.mapper.export_state(), ensure_ascii=False)
         }
+        config["FEEDBACK"] = {
+            source: str(enabled) for source, enabled in self.feedback.enabled.items()
+        }
         preferences.atomic_write(config, CONFIG_PATH)
 
     def factory_reset(self, event=None):
@@ -1838,6 +1953,7 @@ class MainFrame(wx.Frame):
         if self._closing:
             return
         self._closing = True
+        self.feedback.close()
         for key in tuple(self.punch_in_keys):
             self.end_punch_in(key)
         self._close_recorded_notes()

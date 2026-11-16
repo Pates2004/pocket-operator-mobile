@@ -448,7 +448,7 @@ class SequencerAndMidiTests(unittest.TestCase):
 class GuiSmokeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.app = wx.App(False)
+        cls.app = wx.App.Get() or wx.App(False)
 
     def test_window_and_total_recall(self):
         engine = synth.Synthesizer(create_stream=False)

@@ -219,7 +219,7 @@ class InterfaceTests(unittest.TestCase):
                             close_timer.Stop()
                         wx.YieldIfNeeded()
                         self.assertEqual(
-                            frame.GetTitle(), "Pocket Operator mobile v16.0"
+                            frame.GetTitle(), f"{main.APP_NAME} v{main.APP_VERSION}"
                         )
                         self.assertIsNone(frame.mapper.monitor)
                 finally:

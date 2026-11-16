@@ -36,6 +36,9 @@ BUTTON_ACTIONS = {
     "sustain",
     "glide",
     "chord",
+    "feedback_midi",
+    "feedback_keyboard",
+    "feedback_cycle",
 }
 for _layer in synth.LAYER_TYPES:
     BUTTON_ACTIONS.add(f"layer:{_layer}")

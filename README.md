@@ -1,4 +1,4 @@
-# Pocket Operator mobile v16.0
+# Pocket Operator mobile v16.1
 
 [English documentation](README.en.md)
 
@@ -12,6 +12,9 @@ wszystkich historycznych wariantów projektu (v5.0,
 v8.2, v9.0, v11.0, v13.0 i v14.1), naprawia ich rozłączone interfejsy i dodaje
 pełny zapis projektów. Interfejs jest projektowany tak, aby dało się go obsłużyć
 wyłącznie klawiaturą oraz czytnikiem ekranu.
+
+Wersja 16.1 ujednolica informacje głosowe o zmianach z MIDI i klawiatury
+komputerowej. Każde źródło można niezależnie włączyć lub wyłączyć.
 
 ## Najważniejsze możliwości
 
@@ -338,7 +341,30 @@ które mogły pozostać aktywne.
 
 Jeżeli nie ma biblioteki MIDI albo urządzenia, reszta programu działa normalnie.
 
-### Mapowanie dodatkowych przycisków i gałek
+### Informacje głosowe o zmianach
+
+W menu `Ustawienia` znajdują się dwie niezależne pozycje:
+
+- `Czytaj zmiany z MIDI` — skrót `Ctrl+Alt+Shift+F9`;
+- `Czytaj zmiany z klawiatury komputerowej` — skrót `Ctrl+Alt+Shift+F10`.
+
+Zaznacz obie, jedną albo żadną, aby wybrać odpowiednio oba źródła, tylko MIDI,
+tylko klawiaturę lub wyłączyć informacje o zmianach. Domyślnie oba źródła są
+włączone, również przy aktualizacji ze starszego INI. Wybór zapisuje się od razu
+w sekcji `FEEDBACK` pliku `po.ini`. Komunikaty o błędach, gotowości aplikacji
+i potwierdzenie zmiany samego trybu mowy pozostają dostępne.
+
+W edytorze mapowań MIDI można przypisać przyciskowi działania
+`Włącz/wyłącz mowę zmian z MIDI`, `Włącz/wyłącz mowę zmian z klawiatury komputerowej`
+lub `Przełącz źródła informacji głosowych`. Użyj trybu przycisku. Ostatnie działanie
+przełącza kolejno oba źródła, tylko MIDI, tylko klawiaturę i wyciszenie.
+
+Zmiana gałki podaje nazwę i rzeczywistą wartość parametru. Nieprzypisane kontrolery,
+identyczne wartości oraz próby przekroczenia już osiągniętej granicy milczą.
+Szybkie ruchy MIDI są łączone: bez kolejki setek komunikatów, z odczytem wartości
+końcowej po zatrzymaniu. Mowa z klawiatury komputerowej pozostaje natychmiastowa.
+
+### Nauka i edycja mapowania
 
 Otwórz `MIDI → Mapowania MIDI...`. Okno zawiera listę mapowań, ostatni komunikat,
 wybór działania, trybu, numeru kontrolera i kanału oraz przyciski nauki i zapisu.
@@ -391,6 +417,13 @@ przechwyceniu komunikatów. Można też wybrać go ręcznie przyciskiem profilu.
 | Modulation | CC1 | Efekty B |
 | Opcjonalny kontroler głośności | CC7 | Głośność (standard MIDI; nie wystąpił w przechwyceniu) |
 | Play / Stop / Record | MMC 2 / 1 / 6 | Odtwarzanie / Stop / nagrywanie |
+
+Jeżeli słyszysz zmianę tylko z enkodera DATA, sprawdź aktywne cele:
+gałka 1 steruje zanikiem/release (przy Sustain słychać go po puszczeniu nuty),
+gałka 2 steruje aktywnymi warstwami, a gałka 3 aktywnymi efektami. Przykład:
+włącz Sub Square przez `Alt+1`, zagraj nową nutę i obróć gałkę 2. Efekt włącz
+z menu `Efekty`, następnie użyj gałki 3. Ruch gałki nie włącza warstw ani efektów
+automatycznie; przy nieaktywnej grupie zmienia zapisane parametry do jej późniejszego użycia.
 
 Klawiatura ma własne funkcje lokalne. Przycisk, który nie wysyła żadnego komunikatu
 do komputera, nie może być przejęty przez program. Po przeprogramowaniu kontrolera
@@ -497,6 +530,7 @@ zamiast częściowo nadpisywać sesję.
 | `test_launch.py` | Testy silnika, MIDI, sekwencera, UI i Total Recall. |
 | `GEMINI.md` | Historia rozwoju projektu. |
 | `test_v16.py` | Testy konfiguracji, mapowań, języków i regresji MIDI. |
+| `feedback.py`, `test_feedback.py` | Polityka mowy źródeł i regresje rzeczywistych zmian/końcowej wartości. |
 | `build_release.py` | Powtarzalna kompilacja portable, z pracą poza źródłami. |
 | `Installfiles/` | Lokalne aktualne portable; ignorowane przez Git. |
 

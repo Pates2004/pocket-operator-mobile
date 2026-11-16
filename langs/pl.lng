@@ -2,6 +2,20 @@
   "language": "pl",
   "name": "Polski",
   "strings": {
+    "Speak MIDI changes": "Czytaj zmiany z MIDI",
+    "Speak computer keyboard changes": "Czytaj zmiany z klawiatury komputerowej",
+    "Computer keyboard": "klawiatura komputerowa",
+    "Disabled": "Wyłączone",
+    "{source} speech: {state}": "Mowa — {source}: {state}",
+    "{name}: {value} percent": "{name}: {value} procent",
+    "{name}: {state}": "{name}: {state}",
+    "Speech: keyboard and MIDI": "Mowa: klawiatura komputerowa i MIDI",
+    "Speech: MIDI only": "Mowa: tylko MIDI",
+    "Speech: computer keyboard only": "Mowa: tylko klawiatura komputerowa",
+    "Change speech disabled": "Informacje głosowe o zmianach wyłączone",
+    "feedback_midi": "Włącz/wyłącz mowę zmian z MIDI",
+    "feedback_keyboard": "Włącz/wyłącz mowę zmian z klawiatury komputerowej",
+    "feedback_cycle": "Przełącz źródła informacji głosowych",
     "BPM i liczba pętli muszą być dodatnie": "BPM i liczba pętli muszą być dodatnie",
     "Częstotliwość nuty musi być dodatnia i skończona": "Częstotliwość nuty musi być dodatnia i skończona",
     "Wartości syntezatora muszą być słownikiem": "Wartości syntezatora muszą być słownikiem",
@@ -343,6 +357,6 @@
     "drum:cowbell": "Bęben: cowbell",
     "drum:crash": "Bęben: crash",
     "drum:laser": "Bęben: laser",
-    "help": "POCKET OPERATOR MOBILE v16.0 — SKRÓTY\n\nGRA\nSpacja: start/stop; Ctrl+R: nagrywanie; Ctrl+E: edytor perkusji.\nZ S X D C V G B H N J M , L . ; / oraz Q 2 W 3 E 4 R 5 T 6 Y 7 U: nuty.\nF5–F12: Kick, Snare, HiHat, Tom, Clap, Cowbell, Crash, Laser.\nCtrl+F1–F5: Square, Saw, Triangle, Noise, DrumKit.\n\nGAŁKI\nPgUp/PgDn: instrument A; Home/End: instrument B.\nCtrl+Alt+PgUp/PgDn/Home/End: warstwy A/B.\nAlt+PgUp/PgDn/Home/End: efekty A/B.\nCtrl+PgUp/PgDn/Home/End: skrajne wartości instrumentu.\nDelete/Backspace: reset instrumentu A/B.\nCtrl+Alt+Delete/Backspace: reset warstw; Alt+Delete/Backspace: reset FX.\n\nWARSTWY I EFEKTY\nAlt+` oraz Alt+1..= i Alt+\\: przełącz warstwę.\nCtrl+Shift+` oraz Ctrl+Shift+1..=: Punch-In podczas trzymania.\nCtrl+Shift+Backspace: wyłącz warstwy; Alt+Shift+Backspace: wyłącz FX.\nCtrl+Num /,1..0,*,-,.: cel warstw; Ctrl+Shift+Num: cel FX.\nCtrl+NumDel / Ctrl+Shift+NumDel: wszystkie cele warstw/FX.\n\nINNE\nAlt+Góra/Dół/Lewo: głośność +/−/reset.\nCtrl+Góra/Dół/Lewo: oktawa +/−/reset.\nCtrl+S/G/H/B: Sustain/Glide/Akordy/Blokada powtórzeń.\nCtrl+Shift+P: globalne bębny; Ctrl+Shift+Z X C V B N M ,: bębny.\nCtrl+Shift+Escape: PANIC; Ctrl+Shift+Delete: reset fabryczny.\nCtrl+O: otwórz projekt; Ctrl+Shift+S: zapisz; Ctrl+Shift+E: WAV.\nMenu MIDI: mapowania, MIDI Learn, profile kontrolerów.\nMenu Ustawienia: język, motyw, podpowiedzi."
+    "help": "POCKET OPERATOR MOBILE v16.1 — SKRÓTY\n\nGRA\nSpacja: start/stop; Ctrl+R: nagrywanie; Ctrl+E: edytor perkusji.\nZ S X D C V G B H N J M , L . ; / oraz Q 2 W 3 E 4 R 5 T 6 Y 7 U: nuty.\nF5–F12: Kick, Snare, HiHat, Tom, Clap, Cowbell, Crash, Laser.\nCtrl+F1–F5: Square, Saw, Triangle, Noise, DrumKit.\n\nGAŁKI\nPgUp/PgDn: instrument A; Home/End: instrument B.\nCtrl+Alt+PgUp/PgDn/Home/End: warstwy A/B.\nAlt+PgUp/PgDn/Home/End: efekty A/B.\nCtrl+PgUp/PgDn/Home/End: skrajne wartości instrumentu.\nDelete/Backspace: reset instrumentu A/B.\nCtrl+Alt+Delete/Backspace: reset warstw; Alt+Delete/Backspace: reset FX.\n\nWARSTWY I EFEKTY\nAlt+` oraz Alt+1..= i Alt+\\: przełącz warstwę.\nCtrl+Shift+` oraz Ctrl+Shift+1..=: Punch-In podczas trzymania.\nCtrl+Shift+Backspace: wyłącz warstwy; Alt+Shift+Backspace: wyłącz FX.\nCtrl+Num /,1..0,*,-,.: cel warstw; Ctrl+Shift+Num: cel FX.\nCtrl+NumDel / Ctrl+Shift+NumDel: wszystkie cele warstw/FX.\n\nINNE\nAlt+Góra/Dół/Lewo: głośność +/−/reset.\nCtrl+Góra/Dół/Lewo: oktawa +/−/reset.\nCtrl+S/G/H/B: Sustain/Glide/Akordy/Blokada powtórzeń.\nCtrl+Shift+P: globalne bębny; Ctrl+Shift+Z X C V B N M ,: bębny.\nCtrl+Shift+Escape: PANIC; Ctrl+Shift+Delete: reset fabryczny.\nCtrl+O: otwórz projekt; Ctrl+Shift+S: zapisz; Ctrl+Shift+E: WAV.\nMenu MIDI: mapowania, MIDI Learn, profile kontrolerów.\nMenu Ustawienia: język, motyw, podpowiedzi.\nCtrl+Alt+Shift+F9: mowa zmian z MIDI.\nCtrl+Alt+Shift+F10: mowa zmian z klawiatury komputerowej."
   }
 }

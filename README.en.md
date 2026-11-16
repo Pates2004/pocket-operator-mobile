@@ -1,4 +1,4 @@
-# Pocket Operator mobile v16.0
+# Pocket Operator mobile v16.1
 
 [Polska dokumentacja](README.md)
 
@@ -6,6 +6,9 @@ An accessible Windows synthesizer, drum machine, 16-step sequencer and melody
 looper. Version 16 adds MIDI control mapping and learning, controller buttons,
 relative encoders, Polish/English catalogs, themes and mandatory first-run setup.
 It preserves the musical features consolidated in v15 from six historical lines.
+
+Version 16.1 adds consistent spoken change feedback for MIDI and computer
+keyboard controls, with independent persistent switches for both sources.
 
 ## Portable startup
 
@@ -180,6 +183,26 @@ instrument, step and state.
 
 ## MIDI control mapping
 
+### Spoken change feedback
+
+Settings contains two independent switches: **Speak MIDI changes**
+(`Ctrl+Alt+Shift+F9`) and **Speak computer keyboard changes**
+(`Ctrl+Alt+Shift+F10`). Enable both, either one or neither. Both default to enabled,
+including when migrating an older INI. The choice saves immediately in the
+`FEEDBACK` section of `po.ini`. Errors, readiness and confirmation of the feedback
+mode itself remain available.
+
+MIDI buttons can map to **Toggle MIDI change speech**, **Toggle computer keyboard
+change speech**, or **Cycle change speech sources**, using Button mode. Cycle
+selects both, MIDI only, computer keyboard only, then off.
+
+Knobs announce the actual parameter name and value. Unmapped controls, unchanged
+values and already-reached limits remain silent. Rapid MIDI movement is coalesced
+without a speech backlog, retaining the final value when movement stops.
+Computer keyboard changes are announced immediately.
+
+### Learning and editing
+
 Select an input through MIDI, then open **MIDI → MIDI mappings...**.
 
 1. Activate **Learn next control**.
@@ -230,6 +253,13 @@ The default AKM322 profile follows a real physical-control capture:
 | Modulation wheel | CC1 | Effects B |
 | Optional volume control | CC7, standard, not observed in this capture | Volume |
 | Play / Stop / Record | MMC 2 / 1 / 6 | Play / Stop / Record |
+
+If only DATA seems audible, check the other controls' targets: knob 1 controls
+decay/release (with Sustain, hear it after releasing a note), knob 2 controls
+active layers and knob 3 active effects. Enable Sub Square with Alt+1, play a
+new note and turn knob 2. Enable an effect from Effects before turning knob 3.
+Knob movement does not activate layers/effects automatically. With an inactive
+group it updates stored parameters for later use.
 
 The profile loads on first detection, or can be loaded manually from the mapping
 dialog. If the keyboard was reprogrammed, use Learn. Some buttons operate only
@@ -320,6 +350,8 @@ midi_handler.py (ports/notes), midi_mapping.py (routing), midi_dialog.py (editor
 preferences.py/app_paths.py (portable state), localization.py/ui_support.py
 (language/setup/theme), run.py/Start.ps1/Graj.bat (startup).
 test_launch.py covers the original engine and test_v16.py covers new behavior.
+feedback.py and test_feedback.py implement and verify source-specific speech,
+real parameter changes and coalescing of the final MIDI value.
 
 Historical public compatibility aliases remain: set_vol/set_volume, vol/volume,
 layers/active_layers, fx/active_fx, sus/sustain_enabled, glide/glide_enabled,
