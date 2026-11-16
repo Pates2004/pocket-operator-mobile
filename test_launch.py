@@ -166,16 +166,12 @@ class EngineTests(unittest.TestCase):
         engine.set_fx_knob("a", 1.0)
         engine.set_fx_knob("b", 1.0)
         engine.set_vol(1.0)
-        for index, waveform in enumerate(
-            ("square", "saw", "triangle", "noise")
-        ):
+        for index, waveform in enumerate(("square", "saw", "triangle", "noise")):
             engine.note_on(index, 110.0 * (index + 1), waveform)
         for drum in sequencer.DRUM_INSTRUMENTS:
             engine.trigger_drum(drum)
 
-        block = np.concatenate(
-            [engine.generate_block(1_024) for _ in range(20)]
-        )
+        block = np.concatenate([engine.generate_block(1_024) for _ in range(20)])
         self.assertTrue(np.isfinite(block).all())
         self.assertLessEqual(float(np.max(np.abs(block))), 1.0)
         self.assertGreater(float(np.max(np.abs(block))), 0.0)
@@ -291,9 +287,7 @@ class EngineTests(unittest.TestCase):
                 engine.values[f"{effect}_b"] = level
                 engine.note_on("note", 220.0, "triangle")
                 rendered.append(
-                    np.concatenate(
-                        [engine.generate_block(1_024) for _ in range(16)]
-                    )
+                    np.concatenate([engine.generate_block(1_024) for _ in range(16)])
                 )
             self.assertFalse(
                 np.allclose(*rendered),
@@ -431,12 +425,8 @@ class SequencerAndMidiTests(unittest.TestCase):
     def test_midi_note_on_and_off_use_synth_api(self):
         fake = FakeSynth()
         midi = midi_handler.MidiInputHandler(fake, lambda: "saw")
-        midi._handle_message(
-            SimpleNamespace(type="note_on", velocity=100, note=69)
-        )
-        midi._handle_message(
-            SimpleNamespace(type="note_off", velocity=0, note=69)
-        )
+        midi._handle_message(SimpleNamespace(type="note_on", velocity=100, note=69))
+        midi._handle_message(SimpleNamespace(type="note_off", velocity=0, note=69))
         self.assertEqual(fake.notes_on[0][:3], (69, 440.0, "saw"))
         self.assertAlmostEqual(fake.notes_on[0][3], 100 / 127)
         self.assertEqual(fake.notes_off, [69])
@@ -447,9 +437,7 @@ class SequencerAndMidiTests(unittest.TestCase):
         midi._handle_message(
             SimpleNamespace(type="control_change", control=64, value=127)
         )
-        midi._handle_message(
-            SimpleNamespace(type="note_off", velocity=0, note=60)
-        )
+        midi._handle_message(SimpleNamespace(type="note_off", velocity=0, note=60))
         self.assertEqual(fake.notes_off, [])
         midi._handle_message(
             SimpleNamespace(type="control_change", control=64, value=0)
@@ -493,9 +481,7 @@ class GuiSmokeTests(unittest.TestCase):
                 frame.toggle_recording()
                 frame.play_physical_key(ord("X"))
                 frame.toggle_recording()
-                event_types = [
-                    event["type"] for event in frame.seq.melody_track
-                ]
+                event_types = [event["type"] for event in frame.seq.melody_track]
                 self.assertEqual(event_types, ["note_on", "note_off"])
                 frame.release_physical_key(ord("X"))
                 frame.seq.clear_melody()
@@ -544,18 +530,14 @@ class GuiSmokeTests(unittest.TestCase):
                 self.assertAlmostEqual(restored.synth.values["fifth_b"], 0.81)
                 self.assertEqual(restored.saved_midi, "Port 100% MIDI")
                 self.assertTrue(restored.seq.drum_tracks["laser"][15])
-                self.assertEqual(
-                    restored.seq.melody_track[0]["note"]["key"], (90, 0)
-                )
+                self.assertEqual(restored.seq.melody_track[0]["note"]["key"], (90, 0))
                 project = json.loads(
                     json.dumps(restored.project_state(), ensure_ascii=False)
                 )
                 restored.apply_project_state(project)
-                self.assertEqual(project["app_version"], "15.0")
+                self.assertEqual(project["app_version"], main.APP_VERSION)
                 self.assertEqual(project["format"], main.PROJECT_FORMAT)
-                self.assertEqual(
-                    restored.seq.melody_track[0]["note"]["key"], (90, 0)
-                )
+                self.assertEqual(restored.seq.melody_track[0]["note"]["key"], (90, 0))
                 corrupted = json.loads(json.dumps(project))
                 corrupted["settings"]["waveform"] = "triangle"
                 corrupted["settings"]["bpm"] = 90
@@ -588,9 +570,7 @@ class GuiSmokeTests(unittest.TestCase):
                 auto_midi=False,
                 load_config=False,
             )
-            frame.on_key_down(
-                FakeKeyEvent(wx.WXK_F2, control=True)
-            )
+            frame.on_key_down(FakeKeyEvent(wx.WXK_F2, control=True))
             self.assertEqual(frame.waveform, "saw")
 
             frame.on_key_down(FakeKeyEvent(220, alt=True))
@@ -598,15 +578,11 @@ class GuiSmokeTests(unittest.TestCase):
             frame.toggle_layer("fifth")
             frame.synth.targets_layer.add("sub_sin")
             frame.toggle_all_layer_targets()
-            self.assertEqual(
-                frame.synth.targets_layer, {"sub_sin", "fifth"}
-            )
+            self.assertEqual(frame.synth.targets_layer, {"sub_sin", "fifth"})
             frame.toggle_all_layer_targets()
             self.assertFalse(frame.synth.targets_layer)
 
-            frame.on_key_down(
-                FakeKeyEvent(ord("1"), control=True, shift=True)
-            )
+            frame.on_key_down(FakeKeyEvent(ord("1"), control=True, shift=True))
             self.assertIn("lpf", frame.synth.fx)
             frame.on_key_up(FakeKeyEvent(ord("1")))
             self.assertNotIn("lpf", frame.synth.fx)
@@ -624,9 +600,7 @@ class GuiSmokeTests(unittest.TestCase):
             )
             self.assertAlmostEqual(frame.synth.values["sub_sin_a"], 0.99)
 
-            frame.on_key_down(
-                FakeKeyEvent(wx.WXK_ESCAPE, control=True, shift=True)
-            )
+            frame.on_key_down(FakeKeyEvent(wx.WXK_ESCAPE, control=True, shift=True))
             self.assertFalse(frame.synth.shots)
             frame._skip_save = True
             frame.on_close()

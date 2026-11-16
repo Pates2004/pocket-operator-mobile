@@ -78,7 +78,21 @@ Dokumentacja rozwoju aplikacji syntezatora 8-bitowego, stworzonej w Pythonie (wx
 - Przywrócono dokładne dialogi sześciu grup gałek, presety tempa i historyczne aliasy API.
 - Dodano szczegółowe `README.md` oraz testy automatyczne silnika, UI, projektów, MIDI i sekwencera.
 
-## Struktura Projektu (v15.0)
+## Faza 12: Kontrolery, języki i przenośne uruchamianie (v16.0)
+
+- Dodano mapowania CC, nut-przycisków, Program Change, Pitch Bend, Channel Pressure,
+  komunikatów realtime i MMC SysEx; naukę kontrolera i natywny edytor.
+- Profil AKM322 oparto na rzeczywistym przechwyceniu: CC10, CC21–23, CC1 i MMC.
+- Dodano trzy tryby enkoderów względnych oraz szablony dla konfiguracji NI.
+- Oddzielono nuty i sustain poszczególnych kanałów MIDI i poprawiono zamykanie wejścia.
+- Dodano kompletne katalogi polski/angielski `langs/*.lng`, wybór motywu i opcję podpowiedzi.
+- Pierwszy start wymaga zatwierdzenia obu wyborów; anulowanie nie kończy konfiguracji.
+- Zachowano jeden `po.ini` obok programu i atomowy zapis wszystkich sekcji.
+- Naprawiono natywną awarię zamykania okna mapowania przez odpinanie timera przed Destroy.
+- Poprawiono wybór oktawy -1 i nieobsługiwane przez wx nazwy akceleratorów.
+- Dodano portable Windows i przygotowanie bibliotek przez launcher źródłowy.
+
+## Struktura Projektu (v16.0)
 - `main.py`: Główne okno, obsługa klawiatury, menu, logika UI.
 - `synth.py`: Silnik audio (Oscylatory, Warstwy, Efekty DSP, Miksowanie).
 - `sequencer.py`: Logika sekwencera perkusyjnego i nagrywania pętli.
@@ -87,6 +101,11 @@ Dokumentacja rozwoju aplikacji syntezatora 8-bitowego, stworzonej w Pythonie (wx
 - `Graj.bat`: Skrypt uruchomieniowy.
 - `README.md`: Pełna instrukcja instalacji, funkcji, skrótów i diagnostyki.
 - `test_launch.py`: Testy automatyczne v15.
+- `test_v16.py`: Regresje konfiguracji, mapowania, języków i zamykania okien.
+- `midi_mapping.py`, `midi_dialog.py`: Logika i interfejs kontrolerów.
+- `langs/`, `localization.py`: Pliki językowe i tłumaczenia.
+- `preferences.py`, `ui_support.py`, `app_paths.py`: INI, first run, motywy i ścieżki.
+- `build_release.py`: Budowanie portable w lokalnym `Installfiles`.
 
 ## Kluczowe Skróty (v15.0)
 - **Gra:** Spacja (Play), Z/X/C (Nuty).

@@ -1,20 +1,14 @@
 @echo off
 setlocal
-title Pocket Operator mobile v15.0
+title Pocket Operator mobile v16.0
 cd /d "%~dp0"
 
-echo Uruchamianie Pocket Operator mobile v15.0...
-py -3 run.py
-if %ERRORLEVEL% EQU 0 goto end
-
-python run.py
-if %ERRORLEVEL% EQU 0 goto end
-
-echo.
-echo BLAD: Nie udalo sie uruchomic programu.
-echo Zainstaluj Python 3.10 lub nowszy i wykonaj:
-echo python -m pip install -r requirements.txt
-pause
+if exist "Installfiles\PocketOperator-mobile\PocketOperator-mobile.exe" (
+    start "" "Installfiles\PocketOperator-mobile\PocketOperator-mobile.exe"
+    goto end
+)
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0Start.ps1"
+if errorlevel 1 pause
 
 :end
 endlocal

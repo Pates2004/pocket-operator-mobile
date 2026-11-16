@@ -1,4 +1,5 @@
 # Lokalne archiwum i artefakty robocze
+/Installfiles/
 trash/
 __pycache__/
 *.py[cod]

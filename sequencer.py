@@ -27,8 +27,7 @@ class Sequencer:
         self.steps = 16
         self.current_step = 0
         self.drum_tracks = {
-            instrument: [False] * self.steps
-            for instrument in DRUM_INSTRUMENTS
+            instrument: [False] * self.steps for instrument in DRUM_INSTRUMENTS
         }
         self.melody_track = []
         self.loop_duration_ms = self._loop_duration_ms()
@@ -47,9 +46,9 @@ class Sequencer:
                 return False
             if not 0 <= step_index < self.steps:
                 return False
-            self.drum_tracks[instrument][step_index] = not self.drum_tracks[
-                instrument
-            ][step_index]
+            self.drum_tracks[instrument][step_index] = not self.drum_tracks[instrument][
+                step_index
+            ]
             return self.drum_tracks[instrument][step_index]
 
     def clear_drums(self):
@@ -85,7 +84,7 @@ class Sequencer:
                 "note": copy.deepcopy(note),
                 "waveform": waveform,
                 "_id": self._event_counter,
-                # Nutę słychać już na żywo, więc nie powtarzamy jej w tej samej pętli.
+                # Live monitoring already played this event in its recording cycle.
                 "_skip_cycle": cycle,
             }
             self.melody_track.append(event)
@@ -109,17 +108,15 @@ class Sequencer:
                 old_cycle = int(old_elapsed // old_duration)
                 old_position = old_elapsed % old_duration
                 normalized = old_position / old_duration
-                self.start_time = now - (
-                    old_cycle + normalized
-                ) * self.loop_duration_ms
+                self.start_time = now - (old_cycle + normalized) * self.loop_duration_ms
 
     def play(self):
         with self.lock:
             if self.running:
                 return
-            # _skip_cycle chroni przed podwójnym odegraniem nuty nagrywanej na
-            # żywo. Po ponownym starcie numeracja cykli zaczyna się od zera,
-            # więc stare znaczniki nie mogą pozostać aktywne.
+            # _skip_cycle avoids repeating live monitored events in their recording
+            # cycle. Restarting resets the cycle counter to zero, so stale markers
+            # must not survive a restart.
             seen_event_ids = set()
             for event in self.melody_track:
                 event["_skip_cycle"] = -1
@@ -208,9 +205,7 @@ class Sequencer:
                 raise TypeError("Zdarzenie melodii musi być słownikiem")
             event_type = raw_event.get("type")
             note = raw_event.get("note")
-            if event_type not in {"note_on", "note_off"} or not isinstance(
-                note, dict
-            ):
+            if event_type not in {"note_on", "note_off"} or not isinstance(note, dict):
                 raise TypeError("Niepoprawne zdarzenie melodii")
             note = copy.deepcopy(note)
             if isinstance(note.get("key"), list):

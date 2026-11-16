@@ -117,26 +117,20 @@ class Oscillator:
                         sample_count,
                         int(1 + (1.0 - parameter) * 20),
                     )
-                    return np.convolve(
-                        noise, np.ones(width) / width, mode="same"
-                    )
+                    return np.convolve(noise, np.ones(width) / width, mode="same")
                 return noise
             return np.zeros(sample_count)
 
         signal = wave(self.waveform, cycle, self.params["main_a"])
         layer_power = 0.0
         for layer in self.layers:
-            parameter = self.params.get(
-                f"{layer}_a", self.params.get("layer_a", 0.5)
-            )
+            parameter = self.params.get(f"{layer}_a", self.params.get("layer_a", 0.5))
             mix_parameter = self.params.get(
                 f"{layer}_b", self.params.get("layer_b", 0.2)
             )
             layer_signal = np.zeros(sample_count)
             if layer in {"oct_down", "sub_oct"}:
-                layer_signal = wave(
-                    self.waveform, (main_phase * 0.5) % 1.0, parameter
-                )
+                layer_signal = wave(self.waveform, (main_phase * 0.5) % 1.0, parameter)
             elif layer == "sub_sq":
                 layer_signal = np.where(
                     ((main_phase * 0.5) % 1.0) < parameter, 1.0, -1.0
@@ -179,9 +173,10 @@ class Oscillator:
                         mode="same",
                     )
             elif layer == "digital":
-                layer_signal = np.round(
-                    np.where((main_phase % 1.0) < parameter, 1.0, -1.0) * 2.0
-                ) / 2.0
+                layer_signal = (
+                    np.round(np.where((main_phase % 1.0) < parameter, 1.0, -1.0) * 2.0)
+                    / 2.0
+                )
             elif layer == "harm":
                 layer_signal = (
                     np.sin(2 * np.pi * main_phase)
@@ -192,8 +187,7 @@ class Oscillator:
                 harmonic_level = 0.2 + parameter * 0.8
                 layer_signal = (
                     np.sign(np.sin(2 * np.pi * main_phase))
-                    + harmonic_level
-                    * np.sign(np.sin(6 * np.pi * main_phase))
+                    + harmonic_level * np.sign(np.sin(6 * np.pi * main_phase))
                 ) * 0.5
             elif layer == "vinyl":
                 probability = min(0.05, 0.001 * parameter)
@@ -249,19 +243,15 @@ class OneShot:
         if self.finished:
             return np.zeros(sample_count, dtype=np.float32)
 
-        time_axis = np.arange(
-            self.position, self.position + sample_count
-        ) / self.sample_rate
+        time_axis = (
+            np.arange(self.position, self.position + sample_count) / self.sample_rate
+        )
         signal = np.zeros(sample_count)
         duration_multiplier = 0.2 + self.parameter_b * 1.8
 
         if self.type == "kick":
             duration = 0.2 * duration_multiplier
-            phase = (
-                (50 + self.parameter_a * 150)
-                * time_axis
-                * np.exp(-10 * time_axis)
-            )
+            phase = (50 + self.parameter_a * 150) * time_axis * np.exp(-10 * time_axis)
             signal = np.tanh(
                 np.sin(2 * np.pi * phase)
                 * np.maximum(0, 1 - time_axis / duration)
@@ -271,13 +261,7 @@ class OneShot:
             duration = 0.15 * duration_multiplier
             decay = np.maximum(0, 1 - time_axis / duration)
             signal = (
-                np.sin(
-                    2
-                    * np.pi
-                    * (150 + self.parameter_a * 200)
-                    * time_axis
-                )
-                * 0.3
+                np.sin(2 * np.pi * (150 + self.parameter_a * 200) * time_axis) * 0.3
                 + np.random.uniform(-1, 1, sample_count) * 0.7
             ) * decay
         elif self.type == "hihat":
@@ -290,32 +274,20 @@ class OneShot:
         elif self.type == "tom":
             duration = 0.25 * duration_multiplier
             start_frequency = 100 + self.parameter_a * 300
-            phase = (
-                start_frequency
-                * time_axis
-                * np.exp(-5 * time_axis)
-            )
-            signal = np.sin(2 * np.pi * phase) * np.maximum(
-                0, 1 - time_axis / duration
-            )
+            phase = start_frequency * time_axis * np.exp(-5 * time_axis)
+            signal = np.sin(2 * np.pi * phase) * np.maximum(0, 1 - time_axis / duration)
         elif self.type == "clap":
             duration = 0.2 * duration_multiplier
             burst_rate = 30 + self.parameter_a * 20
             envelope = np.maximum(0, 1 - time_axis / duration)
             burst = np.abs(np.sin(2 * np.pi * burst_rate * time_axis))
-            signal = (
-                np.random.uniform(-1, 1, sample_count) * envelope * burst
-            )
+            signal = np.random.uniform(-1, 1, sample_count) * envelope * burst
         elif self.type == "cowbell":
             duration = 0.3 * duration_multiplier
             base_frequency = 540 + self.parameter_a * 500
             envelope = np.maximum(0, 1 - time_axis / duration)
-            tone_one = np.sign(
-                np.sin(2 * np.pi * base_frequency * time_axis)
-            )
-            tone_two = np.sign(
-                np.sin(2 * np.pi * base_frequency * 1.5 * time_axis)
-            )
+            tone_one = np.sign(np.sin(2 * np.pi * base_frequency * time_axis))
+            tone_two = np.sign(np.sin(2 * np.pi * base_frequency * 1.5 * time_axis))
             signal = (tone_one + tone_two) * envelope * 0.5
         elif self.type == "crash":
             duration = 1.5 * duration_multiplier
@@ -324,26 +296,20 @@ class OneShot:
             brightness = self.parameter_a
             metallic = (
                 np.sin(2 * np.pi * (2_300 + brightness * 1_200) * time_axis)
-                + np.sin(
-                    2 * np.pi * (3_710 + brightness * 1_900) * time_axis
-                )
-                + np.sin(
-                    2 * np.pi * (5_840 + brightness * 2_400) * time_axis
-                )
+                + np.sin(2 * np.pi * (3_710 + brightness * 1_900) * time_axis)
+                + np.sin(2 * np.pi * (5_840 + brightness * 2_400) * time_axis)
             ) / 3.0
             signal = (
-                noise * (1.0 - brightness * 0.45)
-                + metallic * brightness * 0.45
-            ) * envelope * 0.8
+                (noise * (1.0 - brightness * 0.45) + metallic * brightness * 0.45)
+                * envelope
+                * 0.8
+            )
         elif self.type == "laser":
             duration = 0.2 * duration_multiplier
             start_frequency = 1_000 + self.parameter_a * 2_000
             end_frequency = 50
             sweep = (end_frequency - start_frequency) / duration
-            phase = (
-                start_frequency * time_axis
-                + sweep / 2 * time_axis**2
-            )
+            phase = start_frequency * time_axis + sweep / 2 * time_axis**2
             signal = np.sign(np.sin(2 * np.pi * phase)) * np.maximum(
                 0, 1 - time_axis / duration
             )
@@ -424,11 +390,11 @@ class Synthesizer:
         try:
             if stream.active:
                 stream.stop()
-        except Exception as error:  # noqa: BLE001 - bezpieczne zamykanie PortAudio
+        except Exception as error:  # noqa: BLE001 - best-effort PortAudio shutdown
             print(f"Błąd zatrzymywania strumienia audio: {error}")
         try:
             stream.close()
-        except Exception as error:  # noqa: BLE001 - bezpieczne zamykanie PortAudio
+        except Exception as error:  # noqa: BLE001 - best-effort PortAudio shutdown
             print(f"Błąd zamykania strumienia audio: {error}")
 
     def change_output_device(self, device):
@@ -473,7 +439,7 @@ class Synthesizer:
                 )
             self._update_oscillators()
 
-    # Publiczne aliasy utrzymują zgodność projektów i skryptów od v5 do v14.
+    # Public aliases preserve v5-v14 project and script compatibility.
     set_volume = set_vol
 
     @property
@@ -597,15 +563,11 @@ class Synthesizer:
         self.fx = set() if value is None else {value}
 
     def set_knob_a(self, value):
-        self.values["main_a"] = _clamp(
-            value, 0.01, 0.99, "gałka instrumentu A"
-        )
+        self.values["main_a"] = _clamp(value, 0.01, 0.99, "gałka instrumentu A")
         self._update_oscillators()
 
     def set_knob_b(self, value):
-        self.values["main_b"] = _clamp(
-            value, 0.0, 1.0, "gałka instrumentu B"
-        )
+        self.values["main_b"] = _clamp(value, 0.0, 1.0, "gałka instrumentu B")
         self._update_oscillators()
 
     def set_layer_knob(self, parameter, value):
@@ -658,7 +620,7 @@ class Synthesizer:
             for oscillator in self.oscs.values():
                 oscillator.params.update(self.values)
 
-    # Zachowana nazwa z wcześniejszych wersji i plików konfiguracyjnych.
+    # Preserve the name used by legacy integrations and configuration.
     _upd = _update_oscillators
 
     def trigger_drum(self, drum_type, params=None):
@@ -677,7 +639,7 @@ class Synthesizer:
                 )
             )
 
-    # Alias naprawia zgodność z interfejsem v14.1.
+    # Preserve the v14.1 drum interface.
     trig_drum = trigger_drum
 
     def note_on(self, key, frequency, waveform="square", velocity=1.0):
@@ -686,7 +648,7 @@ class Synthesizer:
             raise ValueError("Częstotliwość nuty musi być dodatnia i skończona")
         velocity = _clamp(velocity, 0.0, 1.0, "velocity")
         if waveform == "drum_kit":
-            note_number = key[1] if isinstance(key, tuple) else int(key)
+            note_number = key[-1] if isinstance(key, tuple) else int(key)
             drum_types = (
                 "kick",
                 "snare",
@@ -726,6 +688,10 @@ class Synthesizer:
             if oscillator is not None:
                 oscillator.releasing = True
 
+    def silence_note(self, key):
+        with self.lock:
+            self.oscs.pop(key, None)
+
     def all_notes_off(self, immediate=False):
         with self.lock:
             if immediate:
@@ -744,7 +710,7 @@ class Synthesizer:
             print(f"Audio: {status}")
         output[:] = self.generate_block(frame_count).reshape(-1, 1)
 
-    # Zachowana skrócona nazwa z v14.1.
+    # Preserve the short v14.1 entrypoint.
     cb = audio_callback
 
     def generate_block(self, sample_count):
@@ -771,7 +737,7 @@ class Synthesizer:
             self.fx_time += sample_count / SAMPLE_RATE
         return np.clip(mix * self.vol, -1.0, 1.0).astype(np.float32)
 
-    # Zachowana skrócona nazwa z v14.1.
+    # Preserve the short v14.1 entrypoint.
     gen = generate_block
 
     def _apply_effects(self, mix):
@@ -807,28 +773,20 @@ class Synthesizer:
                 mix = mix * (1.0 - parameter_b) + filtered * parameter_b
             elif effect == "verb":
                 delay = int(SAMPLE_RATE * 0.1)
-                indexes = (
-                    np.arange(sample_count) + self.delay_index
-                ) % len(self.delay_buffer)
-                delayed = self.delay_buffer[
-                    (indexes - delay) % len(self.delay_buffer)
-                ]
+                indexes = (np.arange(sample_count) + self.delay_index) % len(
+                    self.delay_buffer
+                )
+                delayed = self.delay_buffer[(indexes - delay) % len(self.delay_buffer)]
                 dry = mix
                 mix = dry * (1.0 - parameter_a) + delayed * parameter_a
-                self.delay_buffer[indexes] = dry + delayed * (
-                    0.1 + parameter_b * 0.85
+                self.delay_buffer[indexes] = dry + delayed * (0.1 + parameter_b * 0.85)
+                self.delay_index = (self.delay_index + sample_count) % len(
+                    self.delay_buffer
                 )
-                self.delay_index = (
-                    self.delay_index + sample_count
-                ) % len(self.delay_buffer)
             elif effect == "hpf":
                 width = min(5, sample_count)
-                smooth = np.convolve(
-                    mix, np.ones(width) / width, mode="same"
-                )
-                filtered = (mix - smooth * parameter_a) * (
-                    0.5 + parameter_a * 1.5
-                )
+                smooth = np.convolve(mix, np.ones(width) / width, mode="same")
+                filtered = (mix - smooth * parameter_a) * (0.5 + parameter_a * 1.5)
                 mix = mix * (1.0 - parameter_b) + filtered * parameter_b
             elif effect == "crush":
                 resolution = 1.5 + parameter_a * 20.0
@@ -839,9 +797,7 @@ class Synthesizer:
                 mix = mix * (1.0 - parameter_b) + distorted * parameter_b
             elif effect == "chop":
                 rate = 2.0 + parameter_a * 28.0
-                gate = np.maximum(
-                    0, np.sign(np.sin(2 * np.pi * rate * time_axis))
-                )
+                gate = np.maximum(0, np.sign(np.sin(2 * np.pi * rate * time_axis)))
                 mix *= (1.0 - parameter_b) + parameter_b * gate
             elif effect == "side":
                 rate = 1.0 + parameter_a * 9.0
@@ -885,9 +841,7 @@ class Synthesizer:
 
     def apply_all_fx(self, audio, frames=None):
         with self.lock:
-            return self._apply_effects(
-                np.asarray(audio, dtype=np.float32).copy()
-            )
+            return self._apply_effects(np.asarray(audio, dtype=np.float32).copy())
 
     apply_fx = apply_all_fx
 
