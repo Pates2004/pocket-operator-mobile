@@ -27,7 +27,7 @@ except ImportError:
 
 
 APP_NAME = "Pocket Operator mobile"
-APP_VERSION = "16.2"
+APP_VERSION = "17.0"
 PROJECT_FORMAT = "pocket-operator-mobile-project"
 BASE_DIR = APP_DIR
 CONFIG_PATH = BASE_DIR / "po.ini"
@@ -275,8 +275,10 @@ class MainFrame(wx.Frame):
         self.punch_in_keys = {}
         self.recorded_notes = set()
         self.recorded_bend_channels = set()
+        self.recorded_expression = False
         self.saved_midi = ""
         self.midi_profile_initialized = False
+        self.midi_live_apply = False
         self.midi_gates = {}
         self.show_hints = True
 
@@ -370,6 +372,15 @@ class MainFrame(wx.Frame):
                 item,
             )
             self.wave_items[code] = item
+        instrument_menu.AppendSeparator()
+        for parameter, label in (
+            ("brightness", "Brightness (filter)..."),
+            ("vibrato", "Vibrato depth..."),
+        ):
+            item = instrument_menu.Append(wx.ID_ANY, label)
+            self.Bind(
+                wx.EVT_MENU, lambda event, key=parameter: self.ask_expression(key), item
+            )
 
         layer_menu = wx.Menu()
         clear_layers = layer_menu.Append(
@@ -752,6 +763,17 @@ class MainFrame(wx.Frame):
         relative = mode == "relative"
         if action == "pitch_bend":
             self.handle_pitch_bend(0, value)
+        elif action == "wave_select":
+            waves = list(self.wave_items)
+            index = (
+                (waves.index(self.waveform) + (1 if value > 0 else -1)) % len(waves)
+                if relative
+                else min(len(waves) - 1, int(value * len(waves)))
+            )
+            self.set_waveform(waves[index])
+        elif action in {"brightness", "vibrato"}:
+            current = self.synth.values[action]
+            self.set_expression(action, current + value if relative else value)
         elif action in {"main_a", "main_b", "layer_a", "layer_b", "fx_a", "fx_b"}:
             target, parameter = action.rsplit("_", 1)
             if relative:
@@ -886,6 +908,49 @@ class MainFrame(wx.Frame):
         if previous != self.synth.vol:
             self.feedback.announce(f"Głośność {int(self.synth.vol * 100)} procent")
         self.update_status()
+
+    def ask_expression(self, parameter):
+        value = ui_support.number_dialog(
+            "Set value from 0 to 100",
+            "Value (%):",
+            parameter,
+            int(self.synth.values[parameter] * 100),
+            0,
+            100,
+            parent=self,
+        )
+        if value != -1:
+            self.set_expression(parameter, value / 100)
+
+    def record_expression_state(self):
+        if self.seq.recording and not self.recorded_expression:
+            for parameter in ("brightness", "vibrato"):
+                self.seq.record_event(
+                    "expression",
+                    {"parameter": parameter, "value": self.synth.values[parameter]},
+                )
+            self.recorded_expression = True
+
+    def set_expression(self, parameter, value):
+        previous = self.synth.values[parameter]
+        value = float(value)
+        if not math.isfinite(value):
+            raise ValueError("Invalid expression value")
+        value = max(0.0, min(1.0, value))
+        if previous != value:
+            self.record_expression_state()
+            self.synth.restore_values({parameter: value})
+            if self.seq.recording:
+                self.seq.record_event(
+                    "expression", {"parameter": parameter, "value": value}
+                )
+            self.feedback.announce(
+                tr(
+                    "{parameter}: {value} percent",
+                    parameter=tr(parameter),
+                    value=int(value * 100),
+                )
+            )
 
     def set_bpm(self, bpm):
         previous = self.bpm
@@ -1068,6 +1133,7 @@ class MainFrame(wx.Frame):
         self.seq.set_recording(enabled)
         if enabled:
             self.recorded_bend_channels.clear()
+            self.recorded_expression = False
         self.feedback.announce(
             "Nagrywanie włączone" if enabled else "Nagrywanie wyłączone"
         )
@@ -1077,6 +1143,7 @@ class MainFrame(wx.Frame):
         frequency = BASE_FREQ_C4 * math.pow(2, (semitone + self.octave * 12) / 12.0)
         note_key = (physical_key, semitone)
         self.synth.note_on(note_key, frequency, self.waveform, velocity)
+        self.record_expression_state()
         self.seq.record_event(
             "note_on",
             {
@@ -1117,6 +1184,7 @@ class MainFrame(wx.Frame):
     def record_midi_event(self, event_type, note):
         note_key = note.get("key")
         if event_type == "note_on":
+            self.record_expression_state()
             channel = self.synth.midi_channel_for_key(note_key)
             if (
                 self.seq.recording
@@ -1549,18 +1617,19 @@ class MainFrame(wx.Frame):
         if scope == "melody":
             self.seq.clear_melody()
             self.recorded_bend_channels.clear()
+            self.recorded_expression = False
         elif scope == "drums":
             self.seq.clear_drums()
         else:
             self.seq.clear_all()
             self.recorded_bend_channels.clear()
+            self.recorded_expression = False
         self.speaker.say(f"Wyczyszczono {labels[scope]}")
 
     def show_about(self, event=None):
         ui_support.message_box(
             f"{APP_NAME} v{APP_VERSION}\n\n"
-            "Dostępny syntezator 8-bitowy, sekwencer i looper dla Windows.\n"
-            "Łączy wszystkie sprawne funkcje historycznych wersji v5–v14.",
+            + tr("Accessible 8-bit synthesizer, sequencer and looper for Windows."),
             "O programie",
             wx.OK | wx.ICON_INFORMATION,
         )
@@ -1582,7 +1651,7 @@ class MainFrame(wx.Frame):
     def project_state(self):
         return {
             "format": PROJECT_FORMAT,
-            "schema": 2,
+            "schema": 3,
             "app_version": APP_VERSION,
             "settings": {
                 "waveform": self.waveform,
@@ -1616,7 +1685,7 @@ class MainFrame(wx.Frame):
             schema = int(state.get("schema", 0))
         except (TypeError, ValueError) as error:
             raise ValueError("Niepoprawna wersja formatu projektu") from error
-        if schema not in {1, 2}:
+        if schema not in {1, 2, 3}:
             raise ValueError("Nieobsługiwana wersja formatu projektu")
 
         settings = state.get("settings", {})
@@ -1951,6 +2020,9 @@ class MainFrame(wx.Frame):
                 self.midi_profile_initialized = config.getboolean(
                     "MIDI_MAPPINGS", "initialized", fallback=True
                 )
+                self.midi_live_apply = config.getboolean(
+                    "MIDI_MAPPINGS", "live_apply", fallback=False
+                )
 
             if "SEQUENCER" in config and config["SEQUENCER"].get("state"):
                 try:
@@ -2019,8 +2091,9 @@ class MainFrame(wx.Frame):
             )
         }
         config["MIDI_MAPPINGS"] = {
-            "version": "2",
+            "version": "3",
             "initialized": str(self.midi_profile_initialized),
+            "live_apply": str(self.midi_live_apply),
             "bindings": json.dumps(self.mapper.export_state(), ensure_ascii=False),
         }
         config["FEEDBACK"] = {

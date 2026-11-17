@@ -24,6 +24,9 @@ CONTINUOUS_ACTIONS = {
     "volume",
     "bpm",
     "pitch_bend",
+    "wave_select",
+    "brightness",
+    "vibrato",
 }
 BUTTON_ACTIONS = {
     "play",
@@ -142,11 +145,11 @@ def binding(source, action, mode="absolute", channel=None):
 def profile(name):
     if name == "akm322":
         return [
-            binding(("cc", 10), "main_a"),
-            binding(("cc", 21), "main_b"),
-            binding(("cc", 22), "layer_a"),
-            binding(("cc", 23), "fx_a"),
-            binding(("cc", 1), "fx_b"),
+            binding(("cc", 10), "wave_select"),
+            binding(("cc", 21), "main_a"),
+            binding(("cc", 22), "main_b"),
+            binding(("cc", 23), "brightness"),
+            binding(("cc", 1), "vibrato"),
             binding(("cc", 7), "volume"),
             binding(("mmc", 2), "play", "button"),
             binding(("mmc", 1), "stop", "button"),
@@ -204,8 +207,16 @@ def preferred_port(ports):
 
 def upgrade_legacy_profile(state, port_name, version):
     normalized = [validate_binding(item) for item in state]
-    if version < 2 and detect_profile(port_name) == "akm322":
-        expected = [item for item in profile("akm322") if item["type"] != "pitch"]
+    if version < 3 and detect_profile(port_name) == "akm322":
+        expected = profile("akm322")
+        for item, action in zip(
+            expected[:3], ("main_a", "main_b", "layer_a"), strict=True
+        ):
+            item["action"] = action
+        expected[3]["action"] = "fx_a"
+        expected[4]["action"] = "fx_b"
+        if version < 2:
+            expected = [item for item in expected if item["type"] != "pitch"]
         if normalized == expected:
             return profile("akm322")
     return normalized
@@ -257,16 +268,32 @@ class MidiMapper:
         if self.on_change:
             self.on_change()
 
-    def add(self, item):
+    def add(self, item, *, replace_index=None):
         item = validate_binding(item)
         identity = (item["type"], item["channel"], item["number"])
         with self.lock:
-            updated = [
-                entry
-                for entry in self.bindings
-                if (entry["type"], entry["channel"], entry["number"]) != identity
-            ]
-            self.import_state([*updated, item])
+            updated = self.export_state()
+            existing = next(
+                (
+                    index
+                    for index, entry in enumerate(updated)
+                    if (entry["type"], entry["channel"], entry["number"]) == identity
+                ),
+                None,
+            )
+            index = replace_index if replace_index is not None else existing
+            if index is None:
+                index = len(updated)
+                updated.append(item)
+            else:
+                if type(index) is not int or not 0 <= index < len(updated):
+                    raise ValueError("Invalid MIDI mapping selection")
+                if existing is not None and existing != index:
+                    raise ValueError("Duplicate MIDI source")
+                updated[index] = item
+            if updated != self.bindings:
+                self.import_state(updated)
+            return index
 
     def process(self, message):
         decoded = source_of(message)

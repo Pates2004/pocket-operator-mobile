@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title Pocket Operator mobile v16.2
+title Pocket Operator mobile v17.0
 cd /d "%~dp0"
 
 if exist "Installfiles\PocketOperator-mobile\PocketOperator-mobile.exe" (

@@ -132,11 +132,10 @@ class MidiFeedbackIntegrationTests(unittest.TestCase):
     def test_each_akm322_knob_changes_assigned_values_and_announces_them(self):
         with self.frame() as (frame, spoken, _):
             for control, key in [
-                (10, "main_a"),
-                (21, "main_b"),
-                (22, "layer_a"),
-                (23, "fx_a"),
-                (1, "fx_b"),
+                (21, "main_a"),
+                (22, "main_b"),
+                (23, "brightness"),
+                (1, "vibrato"),
             ]:
                 before = len(spoken)
                 self.send(frame, control, 100)
@@ -150,9 +149,9 @@ class MidiFeedbackIntegrationTests(unittest.TestCase):
         with self.frame() as (frame, spoken, _):
             self.send(frame, 90, 100)
             self.assertFalse(spoken)
-            self.send(frame, 10, 100)
+            self.send(frame, 21, 100)
             count = len(spoken)
-            self.send(frame, 10, 100)
+            self.send(frame, 21, 100)
             self.assertEqual(len(spoken), count)
             frame.change_knob("main", "a", absolute=100 / 127)
             self.assertEqual(len(spoken), count)
@@ -165,7 +164,7 @@ class MidiFeedbackIntegrationTests(unittest.TestCase):
         with self.frame() as (frame, spoken, path):
             frame.toggle_feedback("midi")
             spoken.clear()
-            self.send(frame, 10, 100)
+            self.send(frame, 21, 100)
             self.assertFalse(spoken)
             frame.change_knob("main", "a", absolute=0.3)
             self.assertEqual(len(spoken), 1)
@@ -206,12 +205,12 @@ class MidiFeedbackIntegrationTests(unittest.TestCase):
 
     def test_returning_to_a_previously_spoken_value_after_mute_is_announced(self):
         with self.frame() as (frame, spoken, _):
-            self.send(frame, 10, 100)
+            self.send(frame, 21, 100)
             frame.toggle_feedback("midi")
-            self.send(frame, 10, 10)
+            self.send(frame, 21, 10)
             frame.toggle_feedback("midi")
             spoken.clear()
-            self.send(frame, 10, 100)
+            self.send(frame, 21, 100)
             self.assertEqual(len(spoken), 1)
             self.assertIn("78", spoken[0])
 
@@ -224,11 +223,11 @@ class MidiFeedbackIntegrationTests(unittest.TestCase):
                 self.send(frame, control, value)
                 renderer = frame.synth._offline_copy()
                 renderer.note_on("test", 220, "square")
-                if control == 21:
+                if control == 22:
                     renderer.note_off("test")
                 return renderer.generate_block(8192)
 
-            for control in (21, 22, 23):
+            for control in (21, 22, 23, 1):
                 low, high = audio(control, 10), audio(control, 110)
                 self.assertFalse(
                     np.allclose(low, high), f"CC{control} has no audible effect"

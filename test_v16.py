@@ -28,10 +28,10 @@ class MappingTests(unittest.TestCase):
     def test_actual_akm322_messages_drive_knobs_and_mmc(self):
         self.mapper.import_state(midi_mapping.profile("akm322"))
         for cc, value, action in [
-            (10, 127, "main_a"),
-            (21, 64, "main_b"),
-            (22, 80, "layer_a"),
-            (23, 90, "fx_a"),
+            (10, 127, "wave_select"),
+            (21, 64, "main_a"),
+            (22, 80, "main_b"),
+            (23, 90, "brightness"),
         ]:
             self.assertTrue(
                 self.mapper.process(

@@ -482,7 +482,9 @@ class GuiSmokeTests(unittest.TestCase):
                 frame.play_physical_key(ord("X"))
                 frame.toggle_recording()
                 event_types = [event["type"] for event in frame.seq.melody_track]
-                self.assertEqual(event_types, ["note_on", "note_off"])
+                self.assertEqual(
+                    event_types, ["expression", "expression", "note_on", "note_off"]
+                )
                 frame.release_physical_key(ord("X"))
                 frame.seq.clear_melody()
                 frame.seq.stop()

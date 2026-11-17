@@ -1,4 +1,4 @@
-# Pocket Operator mobile v16.2
+# Pocket Operator mobile v17.0
 
 [English documentation](README.en.md)
 
@@ -15,22 +15,27 @@ wyłącznie klawiaturą oraz czytnikiem ekranu.
 
 Wersja 16.1 ujednolica informacje głosowe o zmianach z MIDI i klawiatury
 komputerowej. Każde źródło można niezależnie włączyć lub wyłączyć.
-Wersja 16.2 dodaje muzyczny Pitch Bend ±2 półtony, nagrywanie jego ruchów oraz
+Wersja 16.2 dodaje muzyczny Odstrajanie ±2 półtony, nagrywanie jego ruchów oraz
 wyłączanie pojedynczych przypisań bez ich usuwania. Gotowe profile AKM322 i NI
 są częścią źródeł na GitHubie i każdego portable.
+Wersja 17.0 zachowuje kolejność i zaznaczenie edytowanych mapowań, dodaje opcję
+„Stosuj zmiany na bieżąco” oraz nowy układ AKM322: gałki 1/2 sterują instrumentem
+A/B, enkoder DATA wybiera brzmienie, gałka 3 reguluje jasność filtrem, a kółko
+modulacji głębokość vibrato. Poprawiono polskie nazwy instrumentów, warstw,
+efektów i perkusji w menu, komunikatach oraz edytorze mapowań.
 
 ## Najważniejsze możliwości
 
-- pięć głównych instrumentów: Square, Saw, Triangle, Noise i DrumKit;
+- pięć głównych instrumentów: Prostokąt, Piła, Trójkąt, Szum i Perkusja;
 - czternaście jednocześnie działających warstw brzmienia;
 - trzynaście efektów DSP z osobnymi parametrami A/B;
-- prawdziwy tryb Punch-In: efekt działa podczas trzymania skrótu;
+- prawdziwy tryb Efekt chwilowy: efekt działa podczas trzymania skrótu;
 - osiem syntetycznych brzmień perkusyjnych;
 - 16-krokowy sekwencer dla wszystkich ośmiu bębnów;
 - nagrywanie i zapętlone odtwarzanie melodii;
 - wejście MIDI z velocity i obsługą pedału sustain;
 - macierz wyboru warstw i efektów sterowanych gałkami;
-- zapis Total Recall do `po.ini`;
+- zapis Zapamiętywanie ustawień do `po.ini`;
 - przenośne projekty `.po15`;
 - eksport miksu do WAV bez naruszania dźwięku granego na żywo;
 - komunikaty przez `accessible-output2` i pełna obsługa klawiaturą;
@@ -104,14 +109,14 @@ Biblioteki Pythona znajdują się w `requirements.txt`:
 
 | Instrument | Skrót | Charakter i parametr A |
 |---|---:|---|
-| Square | `Ctrl+F1` | Fala prostokątna; A zmienia szerokość impulsu. |
-| Saw | `Ctrl+F2` | Piła z regulowanym punktem załamania. |
-| Triangle | `Ctrl+F3` | Trójkąt; A zwiększa nasycenie i zaokrąglenie. |
-| Noise | `Ctrl+F4` | Szum; A zmienia wygładzenie/barwę. |
-| DrumKit | `Ctrl+F5` | Klawiatura nutowa wyzwala osiem typów bębnów. |
+| Prostokąt | `Ctrl+F1` | Fala prostokątna; A zmienia szerokość impulsu. |
+| Piła | `Ctrl+F2` | Piła z regulowanym punktem załamania. |
+| Trójkąt | `Ctrl+F3` | Trójkąt; A zwiększa nasycenie i zaokrąglenie. |
+| Szum | `Ctrl+F4` | Szum; A zmienia wygładzenie/barwę. |
+| Perkusja | `Ctrl+F5` | Klawiatura nutowa wyzwala osiem typów bębnów. |
 
-Gałka instrumentu B steruje czasem zaniku i release. W trybie Sustain dźwięk
-jest utrzymywany do zwolnienia klawisza. Po wyłączeniu Sustain ten sam parametr
+Gałka instrumentu B steruje czasem zaniku i release. W trybie Podtrzymanie dźwięk
+jest utrzymywany do zwolnienia klawisza. Po wyłączeniu Podtrzymanie ten sam parametr
 określa automatyczny decay.
 
 ## Warstwy
@@ -121,20 +126,20 @@ dzięki czemu zmiana zestawu nie ucina już trwających głosów.
 
 | Warstwa | Skrót | Działanie parametru A |
 |---|---:|---|
-| Octave Down | `Alt+Backtick` | Kopia głównej fali oktawę niżej. |
-| Sub Square | `Alt+1` | Prostokątny subbas oktawę niżej. |
-| Sub Octave | `Alt+2` | Główna fala odtworzona oktawę niżej. |
-| Fifth | `Alt+3` | Kwinta czysta. |
-| Maj 3rd | `Alt+4` | Tercja wielka. |
-| Min 3rd | `Alt+5` | Tercja mała. |
-| Octave Up | `Alt+6` | Prostokąt oktawę wyżej. |
-| Detune | `Alt+7` | Drugi oscylator; A ustala rozstrojenie. |
-| Noise | `Alt+8` | Warstwa szumu; A zmienia jej wygładzenie. |
-| Digital | `Alt+9` | Kwantyzowany prostokąt. |
-| Harmonics | `Alt+0` | Domieszka drugiej i trzeciej harmonicznej. |
-| Organ Stack | `Alt+-` | Stos prostokątnych harmonicznych. |
-| Vinyl | `Alt+=` | Losowe, bipolarne trzaski. |
-| Sub Sine | `Alt+\` | Sinusoidalny subbas z regulowanym nasyceniem. |
+| Oktawa niżej | `Alt+Backtick` | Kopia głównej fali oktawę niżej. |
+| Prostokąt subbasowy | `Alt+1` | Prostokątny subbas oktawę niżej. |
+| Suboktawa | `Alt+2` | Główna fala odtworzona oktawę niżej. |
+| Kwinta | `Alt+3` | Kwinta czysta. |
+| Tercja wielka | `Alt+4` | Tercja wielka. |
+| Tercja mała | `Alt+5` | Tercja mała. |
+| Oktawa wyżej | `Alt+6` | Prostokąt oktawę wyżej. |
+| Rozstrojenie | `Alt+7` | Drugi oscylator; A ustala rozstrojenie. |
+| Szum | `Alt+8` | Warstwa szumu; A zmienia jej wygładzenie. |
+| Cyfrowa | `Alt+9` | Kwantyzowany prostokąt. |
+| Harmoniczne | `Alt+0` | Domieszka drugiej i trzeciej harmonicznej. |
+| Organy | `Alt+-` | Stos prostokątnych harmonicznych. |
+| Winyl | `Alt+=` | Losowe, bipolarne trzaski. |
+| Sinusoida subbasowa | `Alt+\` | Sinusoidalny subbas z regulowanym nasyceniem. |
 
 Parametr B każdej warstwy jest jej poziomem w miksie. To celowa poprawka v15:
 w starszych wariantach gałka B była widoczna i zapisywana, ale nie miała wpływu
@@ -151,29 +156,29 @@ na audio.
 
 ## Efekty
 
-Efekty są przetwarzane w ustalonej kolejności: Noise, Fuzz, Distortion,
-BitCrush, Decimator, RingMod, Tremolo, Chopper, Sidechain, LPF, HPF, Reverb,
-Glitch. Każdy efekt ma działające parametry A i B.
+Efekty są przetwarzane w ustalonej kolejności: Szum, Mocny przester, Przester,
+Redukcja bitów, Redukcja próbkowania, Modulacja pierścieniowa, Tremolo, Cięcie rytmiczne, Pompowanie, LPF, HPF, Pogłos,
+Zakłócenia cyfrowe. Każdy efekt ma działające parametry A i B.
 
-| Efekt | Punch-In | Parametr A | Parametr B |
+| Efekt | Efekt chwilowy | Parametr A | Parametr B |
 |---|---:|---|---|
-| Reverb | `Ctrl+Shift+Backtick` | miks pogłosu | feedback/długość |
-| Low Pass | `Ctrl+Shift+1` | częstotliwość/siła filtra | miks wet/dry |
-| High Pass | `Ctrl+Shift+2` | siła odcięcia dołu | miks wet/dry |
-| BitCrush | `Ctrl+Shift+3` | rozdzielczość kwantyzacji | miks wet/dry |
-| Distortion | `Ctrl+Shift+4` | drive | miks wet/dry |
-| Chopper | `Ctrl+Shift+5` | szybkość bramkowania | głębokość |
-| Sidechain | `Ctrl+Shift+6` | szybkość pompowania | głębokość |
+| Pogłos | `Ctrl+Shift+Backtick` | miks pogłosu | feedback/długość |
+| Filtr dolnoprzepustowy | `Ctrl+Shift+1` | częstotliwość/siła filtra | miks wet/dry |
+| Filtr górnoprzepustowy | `Ctrl+Shift+2` | siła odcięcia dołu | miks wet/dry |
+| Redukcja bitów | `Ctrl+Shift+3` | rozdzielczość kwantyzacji | miks wet/dry |
+| Przester | `Ctrl+Shift+4` | drive | miks wet/dry |
+| Cięcie rytmiczne | `Ctrl+Shift+5` | szybkość bramkowania | głębokość |
+| Pompowanie | `Ctrl+Shift+6` | szybkość pompowania | głębokość |
 | Tremolo | `Ctrl+Shift+7` | szybkość | głębokość |
-| RingMod | `Ctrl+Shift+8` | częstotliwość modulatora | miks wet/dry |
-| Decimator | `Ctrl+Shift+9` | długość sample-and-hold | miks wet/dry |
-| Fuzz | `Ctrl+Shift+0` | gain | miks wet/dry |
-| Glitch | `Ctrl+Shift+-` | liczba fragmentów | miks wet/dry |
-| Noise | `Ctrl+Shift+=` | poziom szumu | intensywność |
+| Modulacja pierścieniowa | `Ctrl+Shift+8` | częstotliwość modulatora | miks wet/dry |
+| Redukcja próbkowania | `Ctrl+Shift+9` | długość sample-and-hold | miks wet/dry |
+| Mocny przester | `Ctrl+Shift+0` | gain | miks wet/dry |
+| Zakłócenia cyfrowe | `Ctrl+Shift+-` | liczba fragmentów | miks wet/dry |
+| Szum | `Ctrl+Shift+=` | poziom szumu | intensywność |
 
-Skrót Punch-In jest momentary: naciśnięcie włącza efekt, a puszczenie klawisza
+Skrót Efekt chwilowy jest momentary: naciśnięcie włącza efekt, a puszczenie klawisza
 przywraca wcześniejszy stan. Jeśli efekt był już włączony na stałe z menu,
-Punch-In go nie wyłączy. Pozycje menu służą do trwałego włączania efektów.
+Efekt chwilowy go nie wyłączy. Pozycje menu służą do trwałego włączania efektów.
 
 `Ctrl+Shift+NumDel` zaznacza lub odznacza wszystkie aktywne efekty jako cele
 gałek FX.
@@ -185,20 +190,20 @@ korzysta z natywnych kodów numpada wxPython.
 
 | Numpad | Warstwa (`Ctrl`) | Efekt (`Ctrl+Shift`) |
 |---:|---|---|
-| `/` | Octave Down | Reverb |
-| `1` | Sub Square | Low Pass |
-| `2` | Sub Octave | High Pass |
-| `3` | Fifth | BitCrush |
-| `4` | Maj 3rd | Distortion |
-| `5` | Min 3rd | Chopper |
-| `6` | Octave Up | Sidechain |
-| `7` | Detune | Tremolo |
-| `8` | Noise | RingMod |
-| `9` | Digital | Decimator |
-| `0` | Harmonics | Fuzz |
-| `*` | Organ Stack | Glitch |
-| `-` | Vinyl | Noise |
-| `.` | Sub Sine | brak przypisania |
+| `/` | Oktawa niżej | Pogłos |
+| `1` | Prostokąt subbasowy | Filtr dolnoprzepustowy |
+| `2` | Suboktawa | Filtr górnoprzepustowy |
+| `3` | Kwinta | Redukcja bitów |
+| `4` | Tercja wielka | Przester |
+| `5` | Tercja mała | Cięcie rytmiczne |
+| `6` | Oktawa wyżej | Pompowanie |
+| `7` | Rozstrojenie | Tremolo |
+| `8` | Szum | Modulacja pierścieniowa |
+| `9` | Cyfrowa | Redukcja próbkowania |
+| `0` | Harmoniczne | Mocny przester |
+| `*` | Organy | Zakłócenia cyfrowe |
+| `-` | Winyl | Szum |
+| `.` | Sinusoida subbasowa | brak przypisania |
 
 Nieaktywny element nie może zostać zaznaczony jako cel. Program komunikuje to
 głosem i pozostawia jego pozycję wyłączoną.
@@ -245,7 +250,7 @@ Silnik zawiera osiem odrębnie syntezowanych głosów:
 | Laser | `F12` | `Ctrl+Shift+,` |
 
 Globalne skróty można wyłączyć ustawieniem `Globalne bębny`. W instrumencie
-DrumKit kolejne nuty wybierają głosy modulo 8.
+Perkusja kolejne nuty wybierają głosy modulo 8.
 
 Gałka instrumentu A zmienia wysokość/barwę bębna, a B czas jego wybrzmiewania.
 Tom, Clap, Cowbell, Crash i Laser korzystają z pełnych algorytmów odzyskanych z
@@ -304,12 +309,12 @@ Q 2 W 3 E 4 R 5 T 6 Y 7 U
 Kody interpunkcji są normalizowane zarówno z ASCII, jak i z windowsowych
 VK_OEM, dzięki czemu `, . ; / - = ` i `\` działają na typowych klawiaturach.
 
-## Głośność, Sustain i Glide
+## Głośność, Podtrzymanie i Portamento
 
 - `Alt+Góra` / `Alt+Dół`: głośniej/ciszej o 5%;
 - `Alt+Lewo`: reset głośności do 20%;
-- `Ctrl+S`: Sustain;
-- `Ctrl+G`: Glide;
+- `Ctrl+S`: Podtrzymanie;
+- `Ctrl+G`: Portamento;
 - `Ctrl+Shift+P`: globalne bębny;
 - `Ctrl+B`: blokada powtarzania;
 - `Ctrl+Shift+Escape`: PANIC, natychmiastowe wyciszenie wszystkich głosów.
@@ -383,6 +388,19 @@ Ręcznie można też podać typ komunikatu, numer i kanał. Kanały w oknie maj�
 Mapowanie tego samego źródła zastępuje poprzednie. Przycisk „Usuń wybrane
 mapowanie” usuwa tylko wskazaną pozycję. Zmiany zapisywane są od razu w INI.
 
+Zapis i kolejne poprawki zachowują pozycję oraz zaznaczenie edytowanego wpisu.
+Zmiana typu, kanału lub numeru wybranego wpisu zastępuje jego źródło; próba
+użycia źródła zajętego przez inny wpis jest odrzucana bez utraty mapowań.
+„Naucz następny kontroler” pozwala dodać nowe źródło.
+
+Zaznacz **Stosuj zmiany na bieżąco**, aby poprawne zmiany działania, trybu,
+kroku, kierunku i włączenia stosowały się bez przycisku „Zapisz mapowanie”.
+Program stosuje je po krótkiej, około 0,18 s przerwie w edycji i zapisuje w INI.
+Wybór ten jest zapamiętywany. Domyślnie obowiązuje ręczny zapis.
+Samo zaznaczenie pozycji nie zmienia jej przypisania. Niedokończone albo
+sprzeczne dane pozostawiają ostatnie poprawne przypisanie; informacja pojawia
+się w monitorze. Błąd zapisu przywraca poprzednią listę mapowań.
+
 Aby czasowo wyłączyć wpis, zaznacz go na liście, odznacz `Przypisanie włączone`
 i wybierz `Zapisz mapowanie`. Wpis pozostanie na liście jako wyłączony; ponowne
 zaznaczenie pola i zapis go przywrócą. Wyłączony wpis ignoruje odpowiadający mu
@@ -391,22 +409,22 @@ wrócić do zwykłej interpretacji MIDI dla danej nuty lub pedału.
 Wyłączone i usunięte mapowania nie są samoczynnie przywracane przy restarcie.
 Ręczne wczytanie profilu zastępuje listę jego domyślnymi, włączonymi wpisami.
 
-### Kółko lub pasek Pitch Bend
+### Kółko lub pasek Odstrajanie
 
-Fabryczne profile przypisują komunikat `Pitch Bend` do muzycznego odstrajania
+Fabryczne profile przypisują komunikat `Odstrajanie` do muzycznego odstrajania
 nut MIDI w zakresie ±2 półtonów. Środek dokładnie przywraca normalną wysokość.
-Działa to na już grające i kolejne nuty danego kanału, także podczas Glide;
+Działa to na już grające i kolejne nuty danego kanału, także podczas Portamento;
 nuty z klawiatury komputerowej i pozostałe kanały nie są odstrajane.
 Zmiany są nagrywane w looperze, zapisywane w projekcie i renderowane do WAV.
 Zatrzymanie pętli, PANIC, zamknięcie portu oraz zmiana/wyłączenie przypisania
 przywracają normalny strój. Zapobiega to pozostawieniu odstrojenia po wyłączeniu
 kółka w połowie ruchu.
 
-Własne przypisanie Pitch Bend można wyłączyć, usunąć albo zastąpić innym działaniem.
-Dla działania muzycznego Pitch Bend wybierz tryb bezwzględny. Profile NI zachowują
+Własne przypisanie Odstrajanie można wyłączyć, usunąć albo zastąpić innym działaniem.
+Dla działania muzycznego Odstrajanie wybierz tryb bezwzględny. Profile NI zachowują
 ten bezwzględny tryb kółka również wtedy, gdy ich gałki pracują względnie.
 
-Obsługiwane źródła: CC, Note On/Off (np. pady), Program Change, Pitch Bend,
+Obsługiwane źródła: CC, Note On/Off (np. pady), Program Change, Odstrajanie,
 Channel Pressure, Start/Continue/Stop oraz MIDI Machine Control (MMC) przez
 Universal Realtime SysEx. Przypisana nuta działa jako przycisk i nie gra dźwięku;
 pozostałe nuty zachowują normalne działanie. CC64/120/123 mają standardowe znaczenie,
@@ -414,7 +432,7 @@ chyba że użytkownik jawnie przypisze im inną funkcję.
 
 | Tryb | Przeznaczenie |
 | --- | --- |
-| Bezwzględny | Zwykła gałka lub suwak 0–127; Pitch Bend używa pełnych 14 bitów. |
+| Bezwzględny | Zwykła gałka lub suwak 0–127; Odstrajanie używa pełnych 14 bitów. |
 | Względny 1/127 | Enkoder: 1 zwiększa, 127 zmniejsza; m.in. NI Relative. |
 | Względny 65/63 | Enkoder względem 64; m.in. NI Relative Offset. |
 | Względny 1/65 | Znak/wartość; 1 zwiększa, 65 zmniejsza. |
@@ -426,7 +444,7 @@ trybu enkodera z pojedynczego komunikatu, ponieważ te same liczby mogą oznacza
 różne rzeczy w różnych urządzeniach.
 
 Działania obejmują sześć grup gałek, osobne A/B każdej warstwy i efektu, głośność,
-BPM, start/stop, nagrywanie, PANIC, oktawę, zmianę instrumentu, Sustain, Glide,
+BPM, start/stop, nagrywanie, PANIC, oktawę, zmianę instrumentu, Podtrzymanie, Portamento,
 akordy, przełączanie warstw/efektów i wyzwalanie każdego z ośmiu bębnów.
 
 ### MIDIPLUS AKM322 — profil sprawdzony na fizycznym urządzeniu
@@ -436,31 +454,37 @@ przechwyceniu komunikatów. Można też wybrać go ręcznie przyciskiem profilu.
 
 | Kontroler | Komunikat | Domyślne działanie |
 | --- | --- | --- |
-| Enkoder DATA | CC10 bezwzględny | Instrument A |
-| Lewe sprężynujące kółko | Pitch Bend | Odstrojenie nut MIDI ±2 półtony |
-| Gałka 1 | CC21 | Instrument B |
-| Gałka 2 | CC22 | Warstwy A |
-| Gałka 3 | CC23 | Efekty A |
-| Modulation | CC1 | Efekty B |
+| Enkoder DATA | CC10 bezwzględny | Wybór brzmienia |
+| Lewe sprężynujące kółko | Odstrajanie | Odstrojenie nut MIDI ±2 półtony |
+| Gałka 1 | CC21 | Instrument A (Page Up/Down) |
+| Gałka 2 | CC22 | Instrument B (Home/End) |
+| Gałka 3 | CC23 | Jasność — filtr dolnoprzepustowy |
+| Kółko modulacji | CC1 | Głębokość vibrato |
 | Opcjonalny kontroler głośności | CC7 | Głośność (standard MIDI; nie wystąpił w przechwyceniu) |
 | Play / Stop / Record | MMC 2 / 1 / 6 | Odtwarzanie / Stop / nagrywanie |
 
-Jeżeli słyszysz zmianę tylko z enkodera DATA, sprawdź aktywne cele:
-gałka 1 steruje zanikiem/release (przy Sustain słychać go po puszczeniu nuty),
-gałka 2 steruje aktywnymi warstwami, a gałka 3 aktywnymi efektami. Przykład:
-włącz Sub Square przez `Alt+1`, zagraj nową nutę i obróć gałkę 2. Efekt włącz
-z menu `Efekty`, następnie użyj gałki 3. Ruch gałki nie włącza warstw ani efektów
-automatycznie; przy nieaktywnej grupie zmienia zapisane parametry do jej późniejszego użycia.
+Gałka 1 reguluje parametr A instrumentu, a gałka 2 zanik/release (przy Podtrzymanie
+słychać go po puszczeniu nuty). Enkoder wybiera pięć brzmień w kolejnych zakresach
+wartości. Filtr gałki 3 działa niezależnie od włączonych efektów i warstw:
+minimum daje ciemny dźwięk (100 Hz), maksimum pomija filtr. Vibrato ma częstotliwość
+5 Hz i maksymalną głębokość ±0,5 półtonu; minimum kółka je wyłącza. Oba parametry
+działają na bieżące i kolejne głosy, także z klawiatury PC. Filtr obejmuje miks,
+w tym perkusję. Nie włączają samoczynnie pozostałych efektów ani warstw.
+
+Te same parametry można ustawić klawiaturą przez `Instrument → Jasność (filtr)...`
+oraz `Instrument → Głębokość vibrato...`. Zapisują się w INI i projekcie;
+ich ruchy podczas nagrywania trafiają do loopera i eksportu WAV. Wyłączenie
+przypisania zatrzymuje dalsze ruchy kontrolera; ostatnia wartość parametru zostaje,
+tak jak przy zwykłych gałkach. Vibrato wyłączysz wartością 0 w menu instrumentu.
 
 Klawiatura ma własne funkcje lokalne. Przycisk, który nie wysyła żadnego komunikatu
 do komputera, nie może być przejęty przez program. Po przeprogramowaniu kontrolera
 użyj nauki lub zmień odpowiedni wpis. [Instrukcja producenta AKM322](https://www.midiplus.com.tw/cn/MIDIPLUS-Download-detail/0/Manual_Of_AKM322_EN/)
 opisuje programowanie gałek, enkodera i przycisków transportu.
 
-Nieedytowany profil AKM322 z v16.0/v16.1 jest przy aktualizacji rozszerzany o kółko.
-Niestandardowe listy nie są nadpisywane. W razie potrzeby można samemu dodać Pitch
-Bend przez naukę albo ponownie wczytać profil AKM322. W v16.2 usunięte/wyłączone
-przypisania są już zapamiętywane bez ich ponownego dodawania.
+Nieedytowany stary profil AKM322 jest przy aktualizacji dostosowywany do nowego
+układu; v16.0/v16.1 otrzymują też brakujące kółko. Własne, usunięte i wyłączone
+przypisania są zachowywane. Nowy układ można ręcznie wczytać przyciskiem profilu.
 
 ### Native Instruments
 
@@ -486,7 +510,7 @@ Układ CC14–21 pokazuje [oficjalna instrukcja M32](https://docs.native-instrum
 To gotowy punkt startowy, nie rozpoznanie dowolnego zmienionego szablonu NI.
 Zapisane własne lub celowo puste mapowania mają pierwszeństwo przed automatyką.
 
-## Total Recall i pliki projektów
+## Zapamiętywanie ustawień i pliki projektów
 
 ### Automatyczny stan `po.ini`
 
@@ -496,7 +520,7 @@ zamknięcie zapisuje też sesję muzyczną:
 
 - instrument, BPM i oktawę;
 - głośność;
-- Sustain, Glide, akordy, klawiaturę PC, blokadę powtórzeń, globalne bębny i
+- Podtrzymanie, Portamento, akordy, klawiaturę PC, blokadę powtórzeń, globalne bębny i
   tryb release;
 - aktywne warstwy i efekty;
 - zaznaczone cele macierzy;
@@ -523,10 +547,10 @@ bez wymagania nowych pól. Język i motyw są preferencjami aplikacji, nie proje
 Przy ręcznym otwieraniu projektu ustawienia sprzętowe są zachowywane z bieżącej
 sesji, aby plik z innego komputera nie przełączył programu na nieistniejące
 urządzenie. Nazwa MIDI i indeks audio pozostają zapisane w projekcie jako
-informacja Total Recall.
+informacja Zapamiętywanie ustawień.
 
 Format ma identyfikator `pocket-operator-mobile-project` oraz wersję schematu.
-V16.2 zapisuje schemat 2 i czyta również schemat 1. Nowszy schemat chroni przed
+V17.0 zapisuje schemat 3 i czyta również schematy 1 i 2. Nowszy schemat chroni przed
 otwarciem wyłączonych mapowań jako aktywnych w starszej wersji programu.
 Niepoprawne lub przyszłe, nieobsługiwane schematy są odrzucane z komunikatem,
 zamiast częściowo nadpisywać sesję.
@@ -557,7 +581,7 @@ zamiast częściowo nadpisywać sesję.
 
 | Plik/katalog | Rola |
 |---|---|
-| `main.py` | Okno, menu, skróty, dostępność, Total Recall i projekty. |
+| `main.py` | Okno, menu, skróty, dostępność, Zapamiętywanie ustawień i projekty. |
 | `synth.py` | Oscylatory, warstwy, bębny, efekty, strumień i eksport WAV. |
 | `sequencer.py` | 16 kroków, nagrywanie melodii, scheduler i serializacja. |
 | `midi_handler.py` | Porty MIDI, velocity, sustain i All Notes Off. |
@@ -570,7 +594,7 @@ zamiast częściowo nadpisywać sesję.
 | `requirements.txt` | Zależności uruchomieniowe. |
 | `requirements-dev.txt` | Zależności do testów i kontroli statycznej. |
 | `pyproject.toml` | Wspólna konfiguracja Ruff dla projektu. |
-| `test_launch.py` | Testy silnika, MIDI, sekwencera, UI i Total Recall. |
+| `test_launch.py` | Testy silnika, MIDI, sekwencera, UI i Zapamiętywanie ustawień. |
 | `GEMINI.md` | Historia rozwoju projektu. |
 | `test_v16.py` | Testy konfiguracji, mapowań, języków i regresji MIDI. |
 | `test_pitch_mapping.py` | Strojenie, środek kółka, kanały, profile i wyłączanie przypisań. |
@@ -605,7 +629,7 @@ Testy obejmują między innymi:
 - MIDI velocity i pedał sustain;
 - zgodność starszego API syntezatora;
 - utworzenie okna wxPython;
-- Total Recall ustawień, parametrów per-element i sekwencera;
+- Zapamiętywanie ustawień ustawień, parametrów per-element i sekwencera;
 - serializację projektu przez prawdziwy JSON;
 - atomowe odrzucenie uszkodzonego projektu bez częściowej zmiany sesji.
 
@@ -695,11 +719,11 @@ cofania całego silnika do ich ograniczeń.
 W katalogu początkowo znajdowało się sześć linii rozwojowych:
 
 - v5.0 Factory — najbardziej czytelna baza i pełne algorytmy ośmiu bębnów;
-- v8.2 — wiele warstw, Sub Sine i rozbudowane menu edycji;
+- v8.2 — wiele warstw, Sinusoida subbasowa i rozbudowane menu edycji;
 - v9.0 Router — pierwszy routing parametrów, ale liczne puste metody;
 - v11.0 Matrix — macierz wyboru celów;
 - v13.0 Full Save — zapis wartości per element, ale pusty eksport WAV;
-- v14.1 Stable — najszerszy Total Recall, lecz rozłączone API sekwencera/MIDI.
+- v14.1 Stable — najszerszy Zapamiętywanie ustawień, lecz rozłączone API sekwencera/MIDI.
 
 v15 zachowuje najlepsze elementy każdej z nich i naprawia ich wspólne błędy.
 Zgodnie z aktualnymi zasadami artefakty robocze, pamięć projektu i archiwalia

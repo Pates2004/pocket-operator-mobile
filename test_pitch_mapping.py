@@ -132,6 +132,12 @@ class FactoryMappingTests(unittest.TestCase):
         legacy = [
             item for item in midi_mapping.profile("akm322") if item["type"] != "pitch"
         ]
+        for item, action in zip(
+            legacy[:3], ("main_a", "main_b", "layer_a"), strict=True
+        ):
+            item["action"] = action
+        legacy[3]["action"] = "fx_a"
+        legacy[4]["action"] = "fx_b"
         for item in legacy:
             item.pop("enabled")
         upgraded = midi_mapping.upgrade_legacy_profile(legacy, "AKM322 0", 1)
@@ -229,7 +235,7 @@ class PitchInterfaceTests(unittest.TestCase):
                     frame.midi._handle_message(mido.Message("pitchwheel", pitch=8191))
                     wx.YieldIfNeeded()
                     self.assertEqual(frame.synth.get_pitch_bend(), 0)
-                    self.assertEqual(frame.project_state()["schema"], 2)
+                    self.assertEqual(frame.project_state()["schema"], 3)
                     frame.load_settings()
                     self.assertFalse(
                         next(
@@ -265,7 +271,12 @@ class PitchInterfaceTests(unittest.TestCase):
                     frame.record_midi_event(
                         "note_on", {"key": 69, "freq": 440, "wave": "square"}
                     )
-                    self.assertEqual(frame.seq.melody_track[0]["type"], "pitch_bend")
+                    self.assertTrue(
+                        any(
+                            event["type"] == "pitch_bend"
+                            for event in frame.seq.melody_track
+                        )
+                    )
                     frame.handle_pitch_bend(0, 1)
                     self.assertEqual(frame.seq.melody_track[-1]["note"]["semitones"], 2)
                     frame.seq.recording = False

@@ -114,7 +114,17 @@ Dokumentacja rozwoju aplikacji syntezatora 8-bitowego, stworzonej w Pythonie (wx
 - Generacje kolejki zapobiegają wykonaniu zdarzeń starego przypisania po jego zmianie.
 - Schemat projektu 2 zachowuje wyłączone mapowania; odczytywany jest też schemat 1.
 
-## Struktura Projektu (v16.2)
+## Faza 15: Edytor i ekspresja MIDI (v17.0)
+
+- Edycja zachowuje pozycję i zaznaczenie; zmiany źródła i duplikaty są atomowe.
+- Opcjonalne bieżące stosowanie mapowań z walidacją, zapisem INI i cofnięciem przy błędzie zapisu.
+- AKM322: CC21/22 = instrument A/B, DATA CC10 = wybór brzmienia,
+  CC23 = filtr jasności, CC1 = vibrato 5 Hz do ±0,5 półtonu.
+- Filtr i vibrato działają w DSP, menu klawiaturowym, projektach, looperze i WAV.
+- Pełne polskie nazwy fal, warstw, efektów i bębnów obejmują menu i komunikaty.
+- Projekt zapisuje schemat 3, odczytuje również 1/2; własne mapowania pozostają.
+
+## Struktura Projektu (v17.0)
 - `main.py`: Główne okno, obsługa klawiatury, menu, logika UI.
 - `synth.py`: Silnik audio (Oscylatory, Warstwy, Efekty DSP, Miksowanie).
 - `sequencer.py`: Logika sekwencera perkusyjnego i nagrywania pętli.

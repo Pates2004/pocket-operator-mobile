@@ -67,7 +67,7 @@ class Sequencer:
     def record_event(self, event_type, note, waveform=None):
         if not self.recording:
             return
-        if event_type not in {"note_on", "note_off", "pitch_bend"}:
+        if event_type not in {"note_on", "note_off", "pitch_bend", "expression"}:
             raise ValueError(f"Nieobsługiwany typ zdarzenia: {event_type}")
 
         now = time.monotonic() * 1_000
@@ -211,6 +211,7 @@ class Sequencer:
                 "note_on",
                 "note_off",
                 "pitch_bend",
+                "expression",
             } or not isinstance(note, dict):
                 raise TypeError("Niepoprawne zdarzenie melodii")
             note = copy.deepcopy(note)
@@ -224,6 +225,16 @@ class Sequencer:
                 if not math.isfinite(semitones) or not -48 <= semitones <= 48:
                     raise ValueError("Invalid recorded Pitch Bend")
                 note = {"channel": channel, "semitones": semitones}
+            elif event_type == "expression":
+                parameter = note.get("parameter")
+                value = float(note.get("value", 0.0))
+                if (
+                    parameter not in {"brightness", "vibrato"}
+                    or not math.isfinite(value)
+                    or not 0 <= value <= 1
+                ):
+                    raise ValueError("Invalid recorded expression")
+                note = {"parameter": parameter, "value": value}
             else:
                 if "key" not in note:
                     raise ValueError("Zdarzenie melodii nie zawiera klucza nuty")
@@ -288,6 +299,8 @@ class Sequencer:
             self.synth.note_off(note["key"])
         elif event.get("type") == "pitch_bend":
             self.synth.set_pitch_bend(note["semitones"], note["channel"])
+        elif event.get("type") == "expression":
+            self.synth.restore_values({note["parameter"]: note["value"]})
 
     def _loop(self):
         previous_step_token = None

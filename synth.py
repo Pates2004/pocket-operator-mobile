@@ -3,6 +3,7 @@ import threading
 import numpy as np
 import sounddevice as sd
 from scipy.io import wavfile
+from scipy.signal import lfilter
 
 SAMPLE_RATE = 44_100
 BLOCK_SIZE = 1_024
@@ -58,6 +59,7 @@ class Oscillator:
         self.target_freq = target_freq
         self.current_freq = start_freq if start_freq is not None else target_freq
         self.pitch_ratio = 1.0
+        self.vibrato_phase = 0.0
         self.midi_channel = None
         self.sample_rate = sample_rate
         self.waveform = waveform
@@ -94,8 +96,19 @@ class Oscillator:
 
         phase_increment = self.current_freq * self.pitch_ratio / self.sample_rate
         sample_index = np.arange(sample_count)
-        main_phase = sample_index * phase_increment + self.phase
-        self.phase = (main_phase[-1] + phase_increment) % 1.0
+        vibrato_step = 2 * np.pi * 5.0 / self.sample_rate
+        depth = self.params.get("vibrato", 0.0)
+        if depth:
+            modulation = np.sin(self.vibrato_phase + sample_index * vibrato_step)
+            increments = phase_increment * 2 ** (depth * 0.5 * modulation / 12)
+            main_phase = self.phase + np.cumsum(increments) - increments
+            self.phase = (main_phase[-1] + increments[-1]) % 1.0
+        else:
+            main_phase = sample_index * phase_increment + self.phase
+            self.phase = (main_phase[-1] + phase_increment) % 1.0
+        self.vibrato_phase = (self.vibrato_phase + sample_count * vibrato_step) % (
+            2 * np.pi
+        )
         cycle = main_phase % 1.0
 
         def wave(waveform, phase, parameter):
@@ -341,6 +354,7 @@ class Synthesizer:
         self.fx_time = 0.0
         self.delay_buffer = np.zeros(int(SAMPLE_RATE * 0.5), dtype=np.float32)
         self.delay_index = 0
+        self.brightness_state = np.zeros(1)
         self.layers = set()
         self.vol = 0.2
         self.running = False
@@ -354,6 +368,8 @@ class Synthesizer:
             "layer_b": 0.2,
             "fx_a": 0.5,
             "fx_b": 0.5,
+            "brightness": 1.0,
+            "vibrato": 0.0,
         }
         for layer in LAYER_TYPES:
             self.values[f"{layer}_a"] = 0.5
@@ -737,6 +753,7 @@ class Synthesizer:
         with self.lock:
             if immediate:
                 self.reset_pitch_bend()
+                self.brightness_state.fill(0)
                 self.oscs.clear()
                 self.shots.clear()
                 self.delay_buffer.fill(0.0)
@@ -776,6 +793,15 @@ class Synthesizer:
             self.shots = active_shots
             if self.fx:
                 mix = self._apply_effects(mix)
+            brightness = self.values["brightness"]
+            if brightness < 1.0:
+                cutoff = 100.0 * 200**brightness
+                alpha = 1 - np.exp(-2 * np.pi * cutoff / SAMPLE_RATE)
+                mix, self.brightness_state = lfilter(
+                    [alpha], [1, alpha - 1], mix, zi=self.brightness_state
+                )
+            else:
+                self.brightness_state.fill(0)
             self.fx_time += sample_count / SAMPLE_RATE
         return np.clip(mix * self.vol, -1.0, 1.0).astype(np.float32)
 
@@ -963,6 +989,8 @@ class Synthesizer:
                     renderer.note_off(payload["key"])
                 elif event_type == "pitch_bend" and payload:
                     renderer.set_pitch_bend(payload["semitones"], payload["channel"])
+                elif event_type == "expression" and payload:
+                    renderer.restore_values({payload["parameter"]: payload["value"]})
                 event_index += 1
             if cursor < block_end:
                 output[cursor:block_end] = renderer.generate_block(block_end - cursor)

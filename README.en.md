@@ -1,4 +1,4 @@
-# Pocket Operator mobile v16.2
+# Pocket Operator mobile v17.0
 
 [Polska dokumentacja](README.md)
 
@@ -12,6 +12,10 @@ keyboard controls, with independent persistent switches for both sources.
 Version 16.2 adds musical ±2-semitone Pitch Bend, bend recording and individually
 disableable assignments. AKM322 and NI presets are bundled in GitHub source
 and portable releases.
+Version 17.0 adds stable mapping rows, optional persistent live edits, natural
+Polish instrument/effect names and the revised AKM322 layout: physical knobs
+1/2 control instrument A/B, DATA selects the instrument, knob 3 controls a
+brightness filter and the modulation wheel controls vibrato depth.
 
 ## Portable startup
 
@@ -213,11 +217,20 @@ Select an input through MIDI, then open **MIDI → MIDI mappings...**.
 3. Select its action and controller mode.
 4. Activate **Save mapping**.
 
-Learning identifies the source; saving is a separate deliberate action. You can
+With live edits off, learning identifies the source and saving applies it. You can
 also enter type, channel and number manually. Channels are 1–16 in the interface,
 0–15 in JSON; Any channel is `null`. Saving an existing source replaces its entry.
 Delete selected mapping removes that entry only. Changes are saved immediately.
 The read-only monitor shows the most recent incoming control message.
+
+Edited mappings retain their position and selection. Editing a selected source's
+type/channel/number replaces that row; duplicate sources are rejected atomically.
+Learn identifies a new source without overwriting an unrelated selected row.
+Enable **Apply changes immediately** to apply and persist valid edits after a
+brief 180 ms pause, without Save. The option survives restart and defaults off.
+Selecting a row does not change routing. Incomplete or conflicting edits keep
+the last valid mapping and display a status message. Failed writes roll back
+the runtime mapping as well.
 
 To disable an entry temporarily, select it, clear **Assignment enabled** and
 activate **Save mapping**. Its disabled state remains visible and persists after
@@ -269,21 +282,28 @@ The default AKM322 profile follows a real physical-control capture:
 
 | Control | Message | Action |
 | --- | --- | --- |
-| DATA encoder | CC10, observed absolute | Instrument A |
+| DATA encoder | CC10, observed absolute | Instrument selection |
 | Left spring-centered wheel | Pitch Bend | MIDI note pitch ±2 semitones |
-| Knob 1 | CC21 | Instrument B |
-| Knob 2 | CC22 | Layers A |
-| Knob 3 | CC23 | Effects A |
-| Modulation wheel | CC1 | Effects B |
+| Knob 1 | CC21 | Instrument A (Page Up/Down) |
+| Knob 2 | CC22 | Instrument B (Home/End) |
+| Knob 3 | CC23 | Brightness low-pass filter |
+| Modulation wheel | CC1 | Vibrato depth |
 | Optional volume control | CC7, standard, not observed in this capture | Volume |
 | Play / Stop / Record | MMC 2 / 1 / 6 | Play / Stop / Record |
 
-If only DATA seems audible, check the other controls' targets: knob 1 controls
-decay/release (with Sustain, hear it after releasing a note), knob 2 controls
-active layers and knob 3 active effects. Enable Sub Square with Alt+1, play a
-new note and turn knob 2. Enable an effect from Effects before turning knob 3.
-Knob movement does not activate layers/effects automatically. With an inactive
-group it updates stored parameters for later use.
+Knob 1 controls instrument A; knob 2 controls decay/release (with Sustain, hear
+it after releasing a note). DATA selects five instruments across its absolute
+range. Knob 3 filters brightness independently of the active effects/layers:
+minimum is a dark 100 Hz low-pass and maximum bypasses the filter. Modulation
+controls 5 Hz vibrato, up to ±0.5 semitones; zero disables it. These parameters
+affect current/future voices including PC notes; the filter covers the full mix,
+including drums. Other layer/effect groups are not enabled automatically.
+
+Both controls are also keyboard-accessible in Instrument → Brightness (filter)
+and Vibrato depth. They persist in INI/projects; recorded movement is included
+in loop playback and WAV export. Disabling a mapping stops further input while
+keeping its last parameter value, like the ordinary knobs. Set vibrato to zero
+from the Instrument menu to silence modulation.
 
 The profile loads on first detection, or can be loaded manually from the mapping
 dialog. If the keyboard was reprogrammed, use Learn. Some buttons operate only
@@ -291,9 +311,9 @@ inside the keyboard and send nothing to the PC; software cannot intercept those.
 The [official AKM322 manual](https://www.midiplus.com.tw/cn/MIDIPLUS-Download-detail/0/Manual_Of_AKM322_EN/)
 describes editing the encoder, knobs and transport buttons.
 
-An unmodified v16.0/v16.1 AKM322 preset is upgraded with the missing wheel.
-Custom lists are preserved: use Learn to add the wheel or explicitly reload the
-profile if needed. Once using v16.2, disabled/deleted bindings are not restored.
+An unchanged older AKM322 factory preset upgrades to this layout; v16.0/v16.1
+also gain the missing wheel. Custom, disabled and deleted mappings are preserved.
+Use the profile button to explicitly load the new defaults.
 
 ### Native Instruments
 
@@ -334,8 +354,8 @@ recreating them. The next start requires setup again.
 
 Ctrl+O opens a project; Ctrl+Shift+S saves readable `.po15` JSON. The extension
 is retained for v15 compatibility; new mapping fields are optional in older
-projects. Identifier: `pocket-operator-mobile-project`. V16.2 writes schema 2 and
-also reads schema 1. The new schema prevents older releases from treating
+projects. Identifier: `pocket-operator-mobile-project`. V17.0 writes schema 3 and
+also reads schemas 1 and 2. The new schema prevents older releases from treating
 disabled mappings as active. A project stores
 musical state and mappings; language/theme remain application preferences.
 Opening a project preserves current hardware selection. Invalid structures or
